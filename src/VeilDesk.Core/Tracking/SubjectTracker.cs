@@ -1,5 +1,6 @@
 using VeilDesk.Core.Detection;
 using VeilDesk.Core.Geometry;
+using VeilDesk.Core.Vision;
 using DetectionRecord = VeilDesk.Core.Detection.Detection;
 
 namespace VeilDesk.Core.Tracking;
@@ -20,6 +21,14 @@ public sealed class TrackedDetection
     public PixelRect SmoothedBox { get; internal set; }
 
     /// <summary>
+    /// The best current estimate of where the subject is. It equals
+    /// <see cref="Box"/> while the subject is detected. When the subject is
+    /// missed but the visible content is measured to have moved, the estimate
+    /// follows that content so the mask stays on the subject.
+    /// </summary>
+    public PixelRect CompensatedBox { get; internal set; }
+
+    /// <summary>
     /// Smoothed confidence of the track. This is an exponential moving average
     /// of the raw detector scores, so a single marginal detection cannot make
     /// the confidence collapse and the censor mask disappear.
@@ -29,12 +38,28 @@ public sealed class TrackedDetection
     /// <summary>Confidence reported by the most recent matching detection.</summary>
     public double RawConfidence { get; internal set; }
 
+    /// <summary>The best raw confidence this track has ever received.</summary>
+    public double PeakConfidence { get; internal set; }
+
     public double VelocityX { get; internal set; }
     public double VelocityY { get; internal set; }
+
+    /// <summary>
+    /// Velocity relative to the content the subject belongs to. It removes the
+    /// measured motion of the visible content, so a face that only scrolls with
+    /// the page is not predicted to move inside the page.
+    /// </summary>
+    public double ContentVelocityX { get; internal set; }
+    public double ContentVelocityY { get; internal set; }
+
     public long FirstSeenMs { get; init; }
     public long LastSeenMs { get; internal set; }
     public long LastPredictionMs { get; internal set; }
     public int Missed { get; internal set; }
+
+    /// <summary>Evidence of the most recent matching raw candidate.</summary>
+    public FaceCandidateEvidence? FaceEvidence { get; internal set; }
+
     public byte[]? Mask { get; internal set; }
     public int MaskWidth { get; internal set; }
     public int MaskHeight { get; internal set; }
@@ -43,6 +68,9 @@ public sealed class TrackedDetection
     public long LastExposureEvidenceMs { get; internal set; }
     public PersonGender Gender { get; internal set; }
     public bool IsPerson => Region == BodyRegion.Person;
+
+    /// <summary>Milliseconds since the subject was last detected.</summary>
+    public long AgeMs(long nowMs) => Math.Max(0, nowMs - LastSeenMs);
 
     internal TrackedDetection Copy() => (TrackedDetection)MemberwiseClone();
 
@@ -53,8 +81,8 @@ public sealed class TrackedDetection
             // Holding a missed detection is a temporal policy, not permission
             // to extrapolate it across the desktop for the full hold interval.
             // Keep the complete observed box and a bounded local prediction.
-            return VeilDesk.Core.Censoring.FaceMaskGeometry.Predict(Box, VelocityX, VelocityY,
-                horizonMs, motionPadding, bounds);
+            return VeilDesk.Core.Censoring.FaceMaskGeometry.Predict(CompensatedBox,
+                ContentVelocityX, ContentVelocityY, horizonMs, motionPadding, bounds);
         }
         var seconds = Math.Max(0, nowMs - LastSeenMs) / 1000.0 + Math.Max(0, horizonMs) / 1000.0;
         // Preserve the existing person/anatomical prediction policy.
@@ -82,6 +110,14 @@ public sealed class TrackerOptions
     /// removing a censor mask that a strong detection just established.
     /// </summary>
     public double ConfidenceSmoothing { get; set; } = 0.4;
+
+    /// <summary>
+    /// How far the area of a new detection may differ from the area of the
+    /// track it would take over. Outside this band the detection is treated as
+    /// a different subject, unless it is clearly more confident than the
+    /// strongest detection that ever established the track.
+    /// </summary>
+    public double MaximumAreaRatio { get; set; } = 4.0;
 }
 
 /// <summary>
@@ -110,7 +146,13 @@ public sealed class SubjectTracker
 
     public int ActiveTrackCount { get { lock (_gate) return _tracks.Count; } }
 
-    public IReadOnlyList<TrackedDetection> Update(IReadOnlyList<DetectionRecord> detections, long nowMs, PixelRect bounds)
+    /// <summary>
+    /// Updates the tracks. <paramref name="motion"/> carries the measured
+    /// motion of the visible content; it is optional so that callers without
+    /// motion evidence keep the previous behaviour.
+    /// </summary>
+    public IReadOnlyList<TrackedDetection> Update(IReadOnlyList<DetectionRecord> detections, long nowMs,
+        PixelRect bounds, SceneMotion? motion = null)
     {
         lock (_gate)
         {
@@ -136,6 +178,7 @@ public sealed class SubjectTracker
                     if (!unmatchedTracks.Contains(track.Id)) continue;
                     if (track.Region != detection.Region) continue;
                     if ((nowMs - track.LastSeenMs) > 3000) continue;
+                    if (!ScaleCompatible(track, detection)) continue;
 
                     var iou = track.PredictedBox(nowMs, 0, 0.05, bounds).IoU(detection.Box);
                     var diag = Math.Sqrt(bounds.Width * bounds.Width + bounds.Height * bounds.Height);
@@ -158,12 +201,15 @@ public sealed class SubjectTracker
                         Region = detection.Region,
                         Box = detection.Box,
                         SmoothedBox = detection.Box,
+                        CompensatedBox = detection.Box,
                         Confidence = detection.Confidence,
                         RawConfidence = detection.Confidence,
+                        PeakConfidence = detection.Confidence,
                         FirstSeenMs = nowMs,
                         LastSeenMs = nowMs,
                         LastPredictionMs = nowMs
                     };
+                    track.FaceEvidence = detection.Face;
                     ApplyMask(track, detection);
                     _tracks.Add(track);
                     unmatchedDetections.Remove(detection);
@@ -192,6 +238,7 @@ public sealed class SubjectTracker
                 var alpha = _options.BoxSmoothing;
                 bestTrack.SmoothedBox = Lerp(bestTrack.SmoothedBox, detection.Box, alpha);
                 bestTrack.Box = detection.Box;
+                bestTrack.CompensatedBox = detection.Box;
                 // The raw detector score is kept for diagnostics, but the
                 // confidence that decides whether a censor mask is drawn is
                 // smoothed. Without this a single marginal detection removes
@@ -201,9 +248,11 @@ public sealed class SubjectTracker
                 bestTrack.Confidence = bestTrack.Confidence * (1.0 - confidenceAlpha) +
                     detection.Confidence * confidenceAlpha;
                 bestTrack.RawConfidence = detection.Confidence;
+                bestTrack.PeakConfidence = Math.Max(bestTrack.PeakConfidence, detection.Confidence);
                 bestTrack.LastSeenMs = nowMs;
                 bestTrack.LastPredictionMs = nowMs;
                 bestTrack.Missed = 0;
+                bestTrack.FaceEvidence = detection.Face;
                 ApplyMask(bestTrack, detection);
                 unmatchedTracks.Remove(bestTrack.Id);
                 unmatchedDetections.Remove(detection);
@@ -215,15 +264,96 @@ public sealed class SubjectTracker
                 if (unmatchedTracks.Contains(track.Id))
                 {
                     track.Missed++;
+                    // A missed face follows the content it belongs to. Without
+                    // this the mask stays at the position the face had before
+                    // the page scrolled, which is what the user sees as a
+                    // stale block that only disappears after the hold window.
+                    if (motion is { IsReliable: true })
+                    {
+                        var (dx, dy) = motion.At(track.CompensatedBox.CenterX, track.CompensatedBox.CenterY);
+                        track.CompensatedBox = track.CompensatedBox.Offset(dx, dy);
+                    }
                     // Face hold time is elapsed time, not the caller's inference FPS.
                     if ((track.Region != BodyRegion.Face && track.Missed > _options.MaxMissedFrames) ||
                         nowMs - track.LastSeenMs > 5000)
                         _tracks.RemoveAt(i);
                 }
+                else
+                {
+                    ApplyContentVelocity(track, motion, dt);
+                }
             }
 
+            RetireDepartedTracks(nowMs, bounds, motion);
             UpdatePersonEvidence(nowMs);
             return _tracks.Select(t => t.Copy()).ToList();
+        }
+    }
+
+    /// <summary>
+    /// A detection may only take over a track when it is plausibly the same
+    /// subject. A screen-sized rectangle must not be allowed to replace a
+    /// small, well established face: the recorded session showed exactly that
+    /// and it turned a 134x158 face into a 795x977 mask.
+    /// </summary>
+    private bool ScaleCompatible(TrackedDetection track, DetectionRecord detection)
+    {
+        var reference = track.Region == BodyRegion.Face ? track.Box : track.SmoothedBox;
+        var referenceArea = Math.Max(1.0, reference.Area);
+        var detectionArea = Math.Max(1.0, detection.Box.Area);
+        var ratio = detectionArea / referenceArea;
+        var limit = Math.Max(1.0, _options.MaximumAreaRatio);
+        if (ratio <= limit && ratio >= 1.0 / limit) return true;
+        // A very different size is only accepted when the new detection is
+        // clearly stronger than anything that ever established the track.
+        return detection.Confidence > track.PeakConfidence;
+    }
+
+    /// <summary>
+    /// Removes the measured content motion from the observed velocity. The
+    /// remaining velocity is the movement of the subject inside the content.
+    /// </summary>
+    private static void ApplyContentVelocity(TrackedDetection track, SceneMotion? motion, double dt)
+    {
+        if (motion is null || !motion.IsReliable || dt <= 0.0005)
+        {
+            track.ContentVelocityX = track.VelocityX;
+            track.ContentVelocityY = track.VelocityY;
+            return;
+        }
+        var (dx, dy) = motion.At(track.CompensatedBox.CenterX, track.CompensatedBox.CenterY);
+        track.ContentVelocityX = track.VelocityX - dx / dt;
+        track.ContentVelocityY = track.VelocityY - dy / dt;
+    }
+
+    /// <summary>
+    /// Retires tracks whose content left the display.
+    ///
+    /// This is the difference between a mask that lingers for the whole hold
+    /// window and one that disappears as soon as the content is gone. The
+    /// retirement is also required for safety: a track whose subject left the
+    /// display has no mask any more, and the coverage guard would otherwise
+    /// ask for a whole-screen cover.
+    ///
+    /// A replaced scene is deliberately *not* a reason to retire a track. A
+    /// detection gap looks the same as a new page, and the hold window exists
+    /// exactly to cover such a gap. A replaced scene only stops the motion
+    /// compensation, because there is no displacement to follow.
+    /// </summary>
+    private void RetireDepartedTracks(long nowMs, PixelRect bounds, SceneMotion? motion)
+    {
+        if (motion is null || !motion.IsReliable) return;
+        for (var i = _tracks.Count - 1; i >= 0; i--)
+        {
+            var track = _tracks[i];
+            if (track.Region != BodyRegion.Face) continue;
+            if (track.Missed == 0) continue;
+            if (track.CompensatedBox.Clip(bounds).IsEmpty)
+            {
+                // The face left the display together with the content it
+                // belonged to.
+                _tracks.RemoveAt(i);
+            }
         }
     }
 

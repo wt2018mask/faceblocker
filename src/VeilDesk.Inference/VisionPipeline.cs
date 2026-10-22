@@ -23,6 +23,16 @@ public sealed record AnalysisResult(
 {
     public IReadOnlyList<Detection> FaceDetections { get; init; } = Array.Empty<Detection>();
     public double FaceMs { get; init; }
+
+    /// <summary>Every raw face candidate the detector produced, with its evidence.</summary>
+    public IReadOnlyList<FaceCandidate> FaceCandidates { get; init; } = Array.Empty<FaceCandidate>();
+
+    /// <summary>Why each raw face candidate was admitted or refused.</summary>
+    public IReadOnlyList<FaceCandidateVerdict> FaceVerdicts { get; init; } =
+        Array.Empty<FaceCandidateVerdict>();
+
+    /// <summary>The measured motion of the visible content for this frame.</summary>
+    public SceneMotion Motion { get; init; } = SceneMotion.None;
 }
 
 /// <summary>
@@ -40,6 +50,7 @@ public sealed class VisionPipeline : IDisposable
     private readonly ConfidenceGate _confidenceGate = new();
     private readonly CoverageGuard _coverageGuard = new();
     private readonly ProtectionSupervisor _supervisor = new();
+    private readonly SceneMotionEstimator _motionEstimator = new();
     private readonly float[] _faceInput = new float[3 * YuNetDetector.Size * YuNetDetector.Size];
     private readonly float[] _nudeInput = new float[3 * FramePreprocessor.NudeNetSize * FramePreprocessor.NudeNetSize];
     private readonly float[] _personInput;
@@ -98,6 +109,7 @@ public sealed class VisionPipeline : IDisposable
             _tracker.Reset();
             _confidenceGate.Reset();
             _coverageGuard.Reset();
+            _motionEstimator.Reset();
             _consecutiveFailures = 0;
             _lastError = null;
             _lastSegmentationMs = long.MinValue / 2;
@@ -146,16 +158,20 @@ public sealed class VisionPipeline : IDisposable
                         personTransform, settings.Detection.PersonConfidence, settings.Detection.NmsIou);
                 }
                 IReadOnlyList<Detection> faces = Array.Empty<Detection>();
+                IReadOnlyList<FaceCandidate> faceCandidates = Array.Empty<FaceCandidate>();
                 double faceMs = 0;
+                var motion = SceneMotion.None;
                 if (settings.Detection.EnabledRegions.Contains(VeilDesk.Core.Detection.BodyRegion.Face))
                 {
                     sw.Restart();
                     YuNetDetector.Preprocess(frame, _faceInput);
                     preprocessMs += sw.Elapsed.TotalMilliseconds;
                     sw.Restart();
-                    faces = YuNetDetector.Decode(_models.RunFace(_faceInput), frame.Width, frame.Height,
+                    faceCandidates = YuNetDetector.DecodeCandidates(_models.RunFace(_faceInput),
+                        frame.Width, frame.Height,
                         Math.Min(settings.Detection.FaceConfidence, 0.35), settings.Detection.NmsIou);
                     faceMs = sw.Elapsed.TotalMilliseconds;
+                    faces = faceCandidates.Select(c => c.Detection).ToList();
                 }
 
                 IReadOnlyList<Detection> body;
@@ -205,6 +221,26 @@ public sealed class VisionPipeline : IDisposable
                 all.AddRange(peopleWithMasks);
                 all.AddRange(body);
 
+                // Measured content motion. It is what lets a mask follow a
+                // scrolling page instead of staying at an abandoned position.
+                sw.Restart();
+                motion = _motionEstimator.Estimate(frame.Span, frame.Width, frame.Height, frame.Stride);
+                preprocessMs += sw.Elapsed.TotalMilliseconds;
+
+                // Raw candidates are gated before they may create or take over a
+                // track. A screen-sized rectangle that contradicts a face, or
+                // that swallows a face that is already tracked, must not become
+                // a mask.
+                var (acceptedFaces, verdicts) = FaceCandidateGate.Evaluate(faces,
+                    settings.Detection.FaceConfidence, _tracker.Snapshot());
+                if (acceptedFaces.Count != faces.Count)
+                {
+                    all.Clear();
+                    all.AddRange(acceptedFaces);
+                    all.AddRange(peopleWithMasks);
+                    all.AddRange(body);
+                }
+
                 IReadOnlyList<TrackedDetection> tracks;
                 IReadOnlyList<CensorRegion> regions;
                 lock (_publicationGate)
@@ -214,7 +250,7 @@ public sealed class VisionPipeline : IDisposable
                         frame.TimestampMs > _supervisor.LastSuccessMs &&
                         completedMs - frame.TimestampMs <= settings.Censoring.FailClosedAfterMs)
                     {
-                        _tracker.Update(all, frame.TimestampMs, frame.LocalBounds);
+                        _tracker.Update(all, frame.TimestampMs, frame.LocalBounds, motion);
                         _supervisor.ReportSuccess(frame.TimestampMs);
                     }
                     _consecutiveFailures = 0;
@@ -225,7 +261,14 @@ public sealed class VisionPipeline : IDisposable
 
                 return new AnalysisResult(body, peopleWithMasks, tracks, regions,
                     preprocessMs, personMs, nudeMs, segmentMs, total.Elapsed.TotalMilliseconds,
-                    segmentationRan, null) { FaceDetections = faces, FaceMs = faceMs };
+                    segmentationRan, null)
+                {
+                    FaceDetections = faces,
+                    FaceMs = faceMs,
+                    FaceCandidates = faceCandidates,
+                    FaceVerdicts = verdicts,
+                    Motion = motion
+                };
             }
         }
         catch (Exception ex)
@@ -359,6 +402,7 @@ public sealed class VisionPipeline : IDisposable
             _tracker.Reset();
             _confidenceGate.Reset();
             _coverageGuard.Reset();
+            _motionEstimator.Reset();
             _consecutiveFailures = 0;
             _lastError = null;
             _lastSegmentationMs = long.MinValue / 2;

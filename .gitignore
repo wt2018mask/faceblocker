@@ -11,6 +11,8 @@ artifacts/
 .vs/
 tools/ffmpeg/
 tools/models-cache/
+tools/__pycache__/
+__pycache__/
 TestResults/
 *.trx
 coverage/

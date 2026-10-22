@@ -449,9 +449,42 @@ public sealed class VeilDeskEngine : IAsyncDisposable, IRecordingSource
                 frameAgeMs = Environment.TickCount64 - frame.TimestampMs,
                 result.PreprocessMs, result.FaceMs, result.TotalMs, result.Error,
                 faces = result.FaceDetections.Select(f => new { f.Box, f.Confidence }),
+                // Raw candidates with their decoded landmarks and the verdict
+                // of the candidate gate. No image content is written, only
+                // geometry, scores and reasons.
+                candidates = result.FaceCandidates.Select(c => new
+                {
+                    c.Box,
+                    c.Confidence,
+                    c.Stride,
+                    Quality = c.Evidence.Quality.ToString(),
+                    Reason = c.Evidence.Reason,
+                    Agreement = c.Evidence.Agreement,
+                    Landmarks = c.Landmarks.Select(p => new { p.X, p.Y })
+                }),
+                verdicts = result.FaceVerdicts.Select(v => new
+                {
+                    v.Decision, v.Reason, v.Box, v.Confidence, v.DuplicateOfTrackId
+                }),
                 masks = result.Regions.Select(r => new { r.TrackId, r.Source, r.Kind, r.Box }),
-                tracks = result.Tracks.Select(t => new { t.Id, t.Region, t.LastSeenMs, t.Missed,
-                    t.Box, t.SmoothedBox, t.VelocityX, t.VelocityY }),
+                tracks = result.Tracks.Select(t => new
+                {
+                    t.Id, t.Region, t.LastSeenMs, t.Missed, t.Box, t.SmoothedBox,
+                    t.CompensatedBox, t.VelocityX, t.VelocityY,
+                    t.ContentVelocityX, t.ContentVelocityY,
+                    t.PeakConfidence, t.RawConfidence,
+                    AgeMs = t.AgeMs(frame.TimestampMs),
+                    FaceQuality = t.FaceEvidence?.Quality.ToString(),
+                    FaceReason = t.FaceEvidence?.Reason
+                }),
+                motion = new
+                {
+                    result.Motion.IsReliable,
+                    result.Motion.ContentReplaced,
+                    result.Motion.GlobalDx,
+                    result.Motion.GlobalDy,
+                    Regions = result.Motion.Regions.Select(r => new { r.Dx, r.Dy, r.Confidence })
+                },
                 state = runner.Pipeline.ProtectionState.ToString()
             }));
         if (snapshot is not null) Volatile.Write(ref runner.Snapshot, snapshot);

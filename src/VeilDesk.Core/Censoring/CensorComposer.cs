@@ -95,8 +95,16 @@ public static class CensorComposer
                 detection.LocalFaceUncertaintyCover && track.Confidence >= Math.Min(0.35, threshold);
             if (!trusted && !uncertainFace) continue;
 
+            // A candidate whose own landmarks contradict a face is masked with
+            // the smallest cover that still contains it. The extra margin of
+            // the uncertain policy would otherwise multiply an already wrong
+            // rectangle by nearly half again in each direction.
+            var evidence = track.FaceEvidence;
+            var contradictory = evidence is not null &&
+                evidence.Quality == FaceCandidateQuality.Invalid;
+
             var margin = track.Region == BodyRegion.Face
-                ? detection.FacePaddingFraction + (uncertainFace ? .12 : 0)
+                ? detection.FacePaddingFraction + (uncertainFace && !contradictory ? .12 : 0)
                 : censoring.MotionPadding;
             var box = track.PredictedBox(nowMs, censoring.PredictionHorizonMs, margin, monitorBounds)
                 .Expand(censoring.MaskExpansion).Clip(monitorBounds);
@@ -105,7 +113,7 @@ public static class CensorComposer
             result.Add(new CensorRegion(
                 track.Id,
                 track.Region,
-                uncertainFace ? CensorRegionKind.UncertainFace : CensorRegionKind.Detection,
+                uncertainFace || contradictory ? CensorRegionKind.UncertainFace : CensorRegionKind.Detection,
                 box,
                 track.Confidence,
                 track.Mask,

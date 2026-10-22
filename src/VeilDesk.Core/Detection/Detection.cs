@@ -17,4 +17,10 @@ public sealed record Detection(
 {
     public bool HasMask => Mask is { Length: > 0 } && MaskWidth > 0 && MaskHeight > 0;
     public bool IsPerson => Region == BodyRegion.Person;
+
+    /// <summary>
+    /// Face-specific evidence for this raw candidate. It is null for every
+    /// other region and for candidates produced without landmarks.
+    /// </summary>
+    public FaceCandidateEvidence? Face { get; init; }
 }

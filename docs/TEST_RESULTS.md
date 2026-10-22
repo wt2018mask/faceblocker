@@ -1,3 +1,28 @@
+# 최신 — 스크롤 추적·과잉 가림 수정 결과 (2026-10-22)
+
+자세한 근거: [FACE-SCROLL-FIX-20261022.md](FACE-SCROLL-FIX-20261022.md). 기준 `1b488be` 이후.
+
+| 항목 | 결과 |
+|---|---|
+| Core 회귀 | VERIFIED: **70/70 PASS** (기존 53 + 신규 17) |
+| Release 빌드 | VERIFIED: 0경고/0오류 (`RunAnalyzers=false`) |
+| 기존 headless probe 전체 | VERIFIED: ProtectionProbe/RecordingProbe/FaceProbe/뷰어 검증 PASS |
+| YuNet 디코딩 대조 | VERIFIED: OpenCV `FaceDetectorYN`과 상자 수치 일치, 랜드마크 공식 수식으로 복구 |
+| 기록 로그 재생(수정 전→후) | VERIFIED: 최대 마스크 **78.4% → 9.8%**, 평균 **3.52% → 1.25%**, coarse duplicate 25건 거부 |
+| 스크롤 시퀀스 12종 | VERIFIED: 얼굴 커버리지 11/12 = 1.00, fast-scroll만 0.86(검출기 한계) |
+| 스크롤 잔상 | VERIFIED: **415~1328ms → 83ms**(합성 fixture, 분석 1회). 2초 유지 정책 자체는 유지 |
+| 진짜 큰 얼굴 | VERIFIED: large-face 시퀀스 커버리지 1.00, 마스크는 검출 크기의 1.24배 |
+| 내용 이동 추정 비용 | VERIFIED: 2560×1600당 P50 3.7ms / P95 5.6ms |
+| Face 분석 P50/P95 | VERIFIED: 68~90ms / 83~163ms (기존 수준) |
+| 실제 인스타그램 브라우저 인수 | **PARTIAL**: 수정은 준비됐으나 실제 화면 관찰은 새 허용 하 재시험 필요 |
+| 잔여 최대 마스크 9.8% | **미해결**: 기록 로그에 랜드마크가 없어 판정 불가. 다음 실사용 로그에서 측정 |
+| 클릭 스루·타이핑·탭/영상·Chrome F10·Stop 정리 | NOT RUN/미확인 (이전과 동일) |
+| 물리 다중 모니터 / 릴리스·M10 | BLOCKED |
+
+실측 산출물: `artifacts/face-scroll-20261022/after.json`,
+`artifacts/face-scroll-20261022/recorded-replay.json`,
+`artifacts/face-scroll-20261022/recorded-geometry-after.json`.
+
 # 최신 사용자 안내 및 Face 국소 가림 검증 (2026-10-22)
 
 상세 근거: [BROWSER-GUIDED-20261022.md](BROWSER-GUIDED-20261022.md).

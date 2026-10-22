@@ -1,3 +1,60 @@
+# 최신 인계 — 스크롤 추적·과잉 가림 수정 (2026-10-22)
+
+자세한 근거: [FACE-SCROLL-FIX-20261022.md](FACE-SCROLL-FIX-20261022.md). 기준 `1b488be` 이후, `codex/protection-recovery`.
+
+## 이번에 무엇을 고쳤고 왜
+
+기록된 인스타그램 로그(`artifacts/browser-acceptance-feb7f0a36b4d4c1db2111068d0244ba7`)를
+프레임별로 덤프해 원인을 확정했다.
+
+1. **원시 후보**: 795×977px(신뢰도 0.361), 622×708px(0.382). 같은 프레임의 실얼굴은
+   123×170~195×241, 신뢰도 0.405~0.916이었다. 큰 후보는 점수가 가장 낮았다.
+2. **연관 오류**: 그 후보가 이미 확립된 실얼굴 트랙을 탈취했다(186×238 → 795×977).
+3. **기하 확대**: 불확실 Face 1.48배 + 예측 sweep → 1199×1242 = 화면 36.4%.
+4. **스크롤 잔상**: 미검출 트랙이 마지막 위치에 고정되어 2초 유지 동안 남았다.
+
+YuNet 상자 디코딩 자체는 OpenCV `FaceDetectorYN`과 수치까지 일치했다(오류 아님).
+누락돼 있던 **랜드마크**를 공식 수식 `(kps+cell)*stride`로 복구했다.
+
+## 새 파일
+
+- `src/VeilDesk.Core/Detection/FaceCandidateEvidence.cs` — 후보 근거/판정 타입.
+- `src/VeilDesk.Core/Detection/FaceCandidateValidator.cs` — 랜드마크 일관성 판정.
+- `src/VeilDesk.Core/Censoring/FaceCandidateGate.cs` — 후보 게이트(증거 기반 거부).
+- `src/VeilDesk.Core/Vision/SceneMotion.cs` — 내용 이동 표현(전역+영역별).
+- `src/VeilDesk.Core/Vision/SceneMotionEstimator.cs` — 3단 피라미드 고정 창 매칭.
+- `tools/FaceScrollProbe/` — 스크롤 시퀀스 정밀도 측정(실제 YuNet).
+- `tools/FaceLogReplay/` — 기록 로그 재생(수정 전/후 비교).
+
+## 바뀐 파일
+
+- `src/VeilDesk.Inference/YuNetDetector.cs` — 랜드마크 복원·후보 근거 첨부.
+- `src/VeilDesk.Core/Tracking/SubjectTracker.cs` — 연관 면적 보호, 내용 이동 보정,
+  화면 퇴장 정리, `PeakConfidence`/`CompensatedBox`/`ContentVelocity`/`FaceEvidence`.
+- `src/VeilDesk.Core/Censoring/FaceMaskGeometry.cs` — 여백 중복 적용 제거.
+- `src/VeilDesk.Core/Censoring/CensorComposer.cs` — 모순 후보 최소 여백.
+- `src/VeilDesk.Inference/VisionPipeline.cs` — 이동 추정·게이트 연결, 진단 노출.
+- `src/VeilDesk.App/VeilDeskEngine.cs` — acceptance 진단에 후보/랜드마크/게이트/이동 추가.
+- `tests/VeilDesk.Core.Tests/FaceCandidateRegressionTests.cs`, `ScrollTrackingRegressionTests.cs` — 신규 17개.
+- `tools/FaceProbe/Program.cs` — 유지 상태 진단 출력 추가.
+
+## 규칙을 지킨 부분
+
+- 신뢰도가 face 임계값 이상인 후보는 **기하만으로 거부하지 않는다**(진짜 큰 얼굴 보호).
+- 2초 face 유지 정책, 국소 불확실 가림, ConfidenceGate, CoverageGuard, Fail-Closed 유지.
+- 장면 교체는 트랙을 삭제하지 않는다(탐지 공백과 구별 불가 → 2초 유지 보존).
+- 이미지 픽셀은 기록/전송하지 않는다.
+
+## 다음 담당자가 할 일
+
+1. 새 사용자 허용 하에 실제 Chrome+인스타그램 재시험:
+   스크롤 중 마스크 따라감, 스크롤 정지 후 잔상, 큰 얼굴 정상 가림,
+   팔·배·배경 오검출 없음, click-through·타이핑·탭·영상, F10, Stop 정리.
+2. 그 세션에서 `VEILDESK_ACCEPTANCE_DIAGNOSTICS=1` 로그를 남기고
+   `tools/analyze_face_log.py`·`tools/FaceLogReplay`로 랜드마크 규칙이 실제로
+   얼마나 기여했는지(잔여 9.8%)를 확정한다.
+3. 브라우저 인수가 통과하면 그 다음에야 패키징·릴리스 판단.
+
 # 최신 인계 — 사용자 확인과 남은 Instagram 결함 (2026-10-22)
 
 [BROWSER-GUIDED-20261022.md](BROWSER-GUIDED-20261022.md)를 먼저 읽는다. 기준 `bee3a85` 이후 Core53/53 및 Release/기존 headless 전체 검증 완료. 완료된 ONNX 통합을 반복하지 않는다.

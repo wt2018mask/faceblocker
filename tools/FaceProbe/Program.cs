@@ -103,6 +103,8 @@ for(var i=0;i<35;i++)
     Check(result.Error is null,"blank inference succeeds");
 }
 var held=pipeline.GetRegions(settings,new PixelRect(0,0,1280,720),stoppedAt+500);
+Console.WriteLine($"HOLD query={stoppedAt+500} stoppedAt={stoppedAt} tracks={pipeline.SnapshotTracks().Count} regions={held.Count} " +
+    string.Join(';',pipeline.SnapshotTracks().Select(t=>$"id{t.Id} lastSeen={t.LastSeenMs} missed={t.Missed} conf={t.Confidence:0.00} comp={t.CompensatedBox}")));
 Check(held.Any(r=>r.Source==BodyRegion.Face),"35 missed passes retain face mask for configured hold");
 var absence=Stopwatch.StartNew();
 while(absence.ElapsedMilliseconds<3200)

@@ -13,11 +13,18 @@ public static class FaceMaskGeometry
         var lookAhead = Math.Clamp(horizonMs, 0, 500) / 1000.0;
         var dx = Math.Clamp(velocityX * lookAhead, -observed.Width * .25, observed.Width * .25);
         var dy = Math.Clamp(velocityY * lookAhead, -observed.Height * .25, observed.Height * .25);
-        var sweep = observed.Union(observed.Offset(dx, dy));
         var padding = Math.Clamp(paddingFraction, 0, .5);
+
+        // The margin belongs to the observed face. It is applied once, to the
+        // face itself, and the local prediction only adds the travel that is
+        // still ahead. Growing the swept rectangle instead would apply the
+        // margin twice to every pixel of predicted travel and turned a small
+        // face into a large rectangle while a page was scrolling.
         var px = observed.Width * padding;
         var py = observed.Height * padding;
-        return new PixelRect(sweep.X - px, sweep.Y - py,
-            sweep.Width + 2 * px, sweep.Height + 2 * py).Clip(bounds);
+        var padded = new PixelRect(observed.X - px, observed.Y - py,
+            observed.Width + 2 * px, observed.Height + 2 * py);
+        var swept = padded.Offset(dx, dy);
+        return padded.Union(swept).Clip(bounds);
     }
 }
