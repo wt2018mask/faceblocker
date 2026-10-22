@@ -1,4 +1,4 @@
-# Credentials and local configuration
+# Credentials, keys and local configuration
 .env
 .env.*
 !.env.example
@@ -13,39 +13,58 @@ id_rsa.*
 *credentials*.json
 *secrets*.json
 
-# Build output and installed dependencies
-node_modules/
+# Build output
+bin/
+obj/
+publish/
 dist/
 build/
 out/
 release/
 artifacts/
-bin/
-obj/
+*.user
+*.suo
+
+# Tooling and local caches
 .venv/
 venv/
 env/
-__pycache__/
-.pytest_cache/
-.next/
-.nuxt/
-coverage/
-target/
-
-# IDE and machine-local files
+.vs/
 .vscode/
 .idea/
-*.user
-*.suo
-*.log
-.DS_Store
-Thumbs.db
-desktop.ini
-
-# Local runtime data and caches
+tools/ffmpeg/
+tools/models-cache/
+tools/__pycache__/
+__pycache__/
+.pytest_cache/
+TestResults/
+*.trx
+coverage/
 .cache/
 tmp/
 temp/
+
+# User data never belongs in the repository
+sessions/
+exports/
+recordings/
+packs/local/
+*.veilpack
+!builtin-packs/*.veilpack
+*.log
 *.sqlite
 *.sqlite3
 *.db
+
+# Large model weights are fetched reproducibly by scripts/fetch-models.ps1
+models/*.onnx
+models/*.pt
+models/*.pth
+models/*.bin
+!models/README.md
+!models/manifest.json
+
+# OS
+Thumbs.db
+desktop.ini
+.DS_Store

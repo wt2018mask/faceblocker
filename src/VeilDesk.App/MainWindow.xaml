@@ -1,0 +1,1079 @@
+﻿<Window x:Class="VeilDesk.App.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="VeilDesk — Local Real-Time Censorship"
+        Width="1320" Height="880" MinWidth="1060" MinHeight="720"
+        WindowStartupLocation="CenterScreen"
+        Background="{StaticResource BgBrush}"
+        Foreground="{StaticResource TextBrush}"
+        FontFamily="Segoe UI"
+        UseLayoutRounding="True"
+        SnapsToDevicePixels="True"
+        Closing="Window_Closing"
+        Loaded="Window_Loaded"
+        StateChanged="Window_StateChanged">
+
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="236"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- Sidebar -->
+        <Border Grid.Column="0" Background="{StaticResource SidebarBrush}"
+                BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,1,0">
+            <Grid Margin="14,22,14,16">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <StackPanel Grid.Row="0" Margin="10,0,10,24">
+                    <StackPanel Orientation="Horizontal">
+                        <Border Width="32" Height="32" CornerRadius="9"
+                                Background="{StaticResource AccentBrush}" Margin="0,0,10,0">
+                            <Path Data="M 16 5 L 26 10 L 26 18 C 26 24 21 27 16 29 C 11 27 6 24 6 18 L 6 10 Z"
+                                  Fill="White" Stretch="Uniform" Margin="8"/>
+                        </Border>
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock Text="VeilDesk" FontSize="18" FontWeight="SemiBold"
+                                       FontFamily="Segoe UI Variable Display, Segoe UI"/>
+                            <TextBlock Text="local protection" FontSize="10.5"
+                                       Foreground="{StaticResource MutedBrush}"/>
+                        </StackPanel>
+                    </StackPanel>
+                </StackPanel>
+
+                <ListBox x:Name="NavList" Grid.Row="1" Style="{StaticResource NavList}"
+                         ItemContainerStyle="{StaticResource NavItem}"
+                         SelectionChanged="NavList_SelectionChanged" SelectedIndex="0">
+                    <ListBoxItem Content="Dashboard"/>
+                    <ListBoxItem Content="Detection"/>
+                    <ListBoxItem Content="Censoring"/>
+                    <ListBoxItem Content="Displays"/>
+                    <ListBoxItem Content="Performance"/>
+                    <ListBoxItem Content="Export"/>
+                    <ListBoxItem Content="Packs"/>
+                    <ListBoxItem Content="Sessions"/>
+                    <ListBoxItem Content="Settings"/>
+                    <ListBoxItem Content="About &amp; diagnostics"/>
+                </ListBox>
+
+                <StackPanel Grid.Row="2">
+                    <Border Background="{StaticResource SurfaceBrush}" BorderBrush="{StaticResource BorderBrush}"
+                            BorderThickness="1" CornerRadius="10" Padding="12" Margin="0,0,0,12">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                <Ellipse x:Name="SidebarStatusDot" Width="8" Height="8"
+                                         Fill="{StaticResource MutedBrush}" VerticalAlignment="Center"/>
+                                <TextBlock x:Name="SidebarStatusText" Text="Idle" FontSize="12.5"
+                                           FontWeight="SemiBold" Margin="8,0,0,0"/>
+                            </StackPanel>
+                            <TextBlock x:Name="SidebarStatusDetail" Text="Nothing is being captured."
+                                       Style="{StaticResource Muted}" FontSize="11.5"/>
+                        </StackPanel>
+                    </Border>
+                    <TextBlock Text="v1.0.0 · offline build" FontSize="10.5"
+                               Foreground="{StaticResource MutedBrush}" Margin="4,0,0,2"/>
+                    <TextBlock Text="No account · no telemetry" FontSize="10.5"
+                               Foreground="{StaticResource MutedBrush}" Margin="4,0,0,0"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- Main area -->
+        <Grid Grid.Column="1">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <Grid Grid.Row="0" Margin="34,26,34,18">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel>
+                    <TextBlock x:Name="PageTitle" Text="Dashboard" Style="{StaticResource H1}"/>
+                    <TextBlock x:Name="PageSubtitle" Text="A private, real-time censor that never sends a frame anywhere."
+                               Style="{StaticResource Muted}" Margin="0,4,0,0"/>
+                </StackPanel>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Border x:Name="StatePill" Background="{StaticResource SurfaceBrush}"
+                            BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
+                            CornerRadius="20" Padding="12,7" Margin="0,0,10,0">
+                        <StackPanel Orientation="Horizontal">
+                            <Ellipse x:Name="StateDot" Width="8" Height="8"
+                                     Fill="{StaticResource MutedBrush}" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="StateText" Text="Idle" FontSize="12" FontWeight="SemiBold"
+                                       Margin="7,0,0,0"/>
+                        </StackPanel>
+                    </Border>
+                    <Button x:Name="HeaderStartButton" Content="Start protection"
+                            Style="{StaticResource PrimaryButton}" Padding="18,9"
+                            Click="StartStop_Click"/>
+                </StackPanel>
+            </Grid>
+
+            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled" Padding="34,0,28,26">
+                <Grid>
+
+                    <!-- DASHBOARD -->
+                    <StackPanel x:Name="PageDashboard">
+                        <Border Style="{StaticResource Card}" Padding="24" Margin="0,0,0,16">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel>
+                                    <TextBlock x:Name="HeroEyebrow" Text="PROTECTION OFF" FontSize="11"
+                                               FontWeight="SemiBold" Foreground="{StaticResource MutedBrush}"/>
+                                    <TextBlock x:Name="HeroTitle" Text="Your screen is not being captured."
+                                               FontSize="25" FontWeight="SemiBold" Margin="0,8,0,6"
+                                               FontFamily="Segoe UI Variable Display, Segoe UI"/>
+                                    <TextBlock x:Name="HeroBody" Style="{StaticResource Muted}" MaxWidth="620"
+                                               Text="Choose targets, then start local desktop protection. Alt+S starts, stops, or cancels initialization. Ctrl+Shift+F10 stops protection from other applications."/>
+                                    <TextBlock x:Name="TargetSelectionText" Style="{StaticResource SmallLabel}" Margin="0,12,0,0" TextWrapping="Wrap"/>
+                                    <TextBlock x:Name="TargetSelectionHint" Style="{StaticResource Muted}" Margin="0,4,0,0" TextWrapping="Wrap"/>
+                                    <WrapPanel Margin="0,12,0,0">
+                                        <Button x:Name="HeroStartButton" Content="Start protection"
+                                                Style="{StaticResource PrimaryButton}" Padding="20,10"
+                                                Click="StartStop_Click"/>
+                                        <Button x:Name="FaceOnlyButton" Content="_Face only · black" Style="{StaticResource GhostButton}"
+                                                ToolTip="Select Face and solid black while stopped. Stop protection before changing targets."
+                                                ToolTipService.ShowOnDisabled="True"
+                                                Margin="10,0,0,0" Click="FaceOnly_Click"/>
+                                        <Button Content="Open settings" Style="{StaticResource GhostButton}"
+                                                Margin="10,0,0,0" Click="GoSettings_Click"/>
+                                    </WrapPanel>
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="24,0,0,0">
+                                    <Border Background="{StaticResource AccentSoftBrush}" CornerRadius="12"
+                                            Padding="14,12" Width="200">
+                                        <StackPanel>
+                                            <TextBlock Text="PIPELINE" FontSize="10" FontWeight="SemiBold"
+                                                       Foreground="{StaticResource MutedBrush}"/>
+                                            <TextBlock Text="WGC → ONNX → overlay" FontSize="13"
+                                                       FontWeight="SemiBold" Margin="0,5,0,4"/>
+                                            <TextBlock Text="100% on this PC" FontSize="11"
+                                                       Foreground="{StaticResource GoodBrush}"/>
+                                        </StackPanel>
+                                    </Border>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+
+                        <UniformGrid Columns="4" Margin="0,0,0,16">
+                            <Border Style="{StaticResource Card}" Margin="0,0,10,0">
+                                <StackPanel>
+                                    <TextBlock Text="CAPTURE" Style="{StaticResource SectionTitle}"/>
+                                    <TextBlock x:Name="DashCapture" Text="—" Style="{StaticResource StatValue}"/>
+                                    <TextBlock x:Name="DashCaptureSub" Text="frames per second" Style="{StaticResource Muted}"/>
+                                </StackPanel>
+                            </Border>
+                            <Border Style="{StaticResource Card}" Margin="0,0,10,0">
+                                <StackPanel>
+                                    <TextBlock Text="ANALYSIS P50" Style="{StaticResource SectionTitle}"/>
+                                    <TextBlock x:Name="DashLatency" Text="—" Style="{StaticResource StatValue}"/>
+                                    <TextBlock x:Name="DashLatencySub" Text="full local inference" Style="{StaticResource Muted}"/>
+                                </StackPanel>
+                            </Border>
+                            <Border Style="{StaticResource Card}" Margin="0,0,10,0">
+                                <StackPanel>
+                                    <TextBlock Text="ACTIVE TRACKS" Style="{StaticResource SectionTitle}"/>
+                                    <TextBlock x:Name="DashTracks" Text="0" Style="{StaticResource StatValue}"/>
+                                    <TextBlock x:Name="DashTracksSub" Text="persistent subjects" Style="{StaticResource Muted}"/>
+                                </StackPanel>
+                            </Border>
+                            <Border Style="{StaticResource Card}">
+                                <StackPanel>
+                                    <TextBlock Text="DETECTION EVENTS" Style="{StaticResource SectionTitle}"/>
+                                    <TextBlock x:Name="DashDetections" Text="0" Style="{StaticResource StatValue}"/>
+                                    <TextBlock x:Name="DashDetectionsSub" Text="this session" Style="{StaticResource Muted}"/>
+                                </StackPanel>
+                            </Border>
+                        </UniformGrid>
+
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="1.15*"/>
+                                <ColumnDefinition Width="1*"/>
+                            </Grid.ColumnDefinitions>
+                            <Border Style="{StaticResource Card}" Margin="0,0,10,0">
+                                <StackPanel>
+                                    <TextBlock Text="ACTIVE DISPLAYS" Style="{StaticResource SectionTitle}"/>
+                                    <StackPanel x:Name="DashMonitorsPanel">
+                                        <TextBlock Text="Protection is idle. Connected displays will appear here."
+                                                   Style="{StaticResource Muted}"/>
+                                    </StackPanel>
+                                    <Border Style="{StaticResource Divider}"/>
+                                    <TextBlock Text="GUARDRAILS" Style="{StaticResource SectionTitle}"/>
+                                    <StackPanel>
+                                        <TextBlock Text="• Overlay windows are excluded from capture (WDA_EXCLUDEFROMCAPTURE)."
+                                                   Style="{StaticResource Muted}" Margin="0,0,0,6"/>
+                                        <TextBlock Text="• Fail-closed covers the display when inference stops being confident or recent."
+                                                   Style="{StaticResource Muted}" Margin="0,0,0,6"/>
+                                        <TextBlock Text="• No screen, frame, detection or session leaves this machine."
+                                                   Style="{StaticResource Muted}"/>
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
+                            <Border Grid.Column="1" Style="{StaticResource Card}" Margin="10,0,0,0">
+                                <StackPanel>
+                                    <TextBlock Text="PIPELINE HEALTH" Style="{StaticResource SectionTitle}"/>
+                                    <StackPanel x:Name="DashHealthPanel">
+                                        <TextBlock Text="Start protection to see provider, overlay exclusion and frame freshness."
+                                                   Style="{StaticResource Muted}"/>
+                                    </StackPanel>
+                                    <Border Style="{StaticResource Divider}"/>
+                                    <TextBlock Text="A NOTE ON HONESTY" Style="{StaticResource SectionTitle}"/>
+                                    <TextBlock Style="{StaticResource Muted}"
+                                               Text="This build runs real models on real captured frames. It does not pretend that every detector is perfect: false positives and missed detections exist and are documented. Fail-closed is the safety net."/>
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+                    </StackPanel>
+
+                    <!-- DETECTION -->
+                    <StackPanel x:Name="PageDetection" Visibility="Collapsed">
+                        <TextBlock Text="Targets can be changed while stopped. Face confidence is separate from anatomical confidence." Style="{StaticResource Muted}" Margin="0,0,0,12"/>
+
+                        <Border Style="{StaticResource Card}" Margin="0,0,0,16">
+                            <StackPanel>
+                                <TextBlock Text="TARGETS · FACE AND ANATOMICAL REGIONS" Style="{StaticResource SectionTitle}"/>
+                                <TextBlock Text="Face uses dedicated local YuNet detection for all people. Other regions use NudeNet. Clear all, then select Face for face-only protection. Stop before changing targets."
+                                           Style="{StaticResource Muted}" Margin="0,0,0,14"/>
+                                <WrapPanel x:Name="RegionPanel"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                                    <Button Content="Select exposure classes" Style="{StaticResource GhostButton}"
+                                            Click="SelectExposure_Click"/>
+                                    <Button Content="Clear all" Style="{StaticResource GhostButton}" Margin="8,0,0,0"
+                                            Click="ClearRegions_Click"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+
+                        <Grid Margin="0,0,0,16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Border Style="{StaticResource Card}" Margin="0,0,10,0">
+                                <StackPanel>
+                                    <TextBlock Text="THRESHOLDS" Style="{StaticResource SectionTitle}"/>
+                                    <TextBlock Text="Face confidence (YuNet)" Style="{StaticResource SmallLabel}"/>
+                                    <Slider x:Name="FaceConfidenceSlider" Minimum="0.05" Maximum="0.95" Value="0.6" ValueChanged="SettingChanged" Margin="0,0,0,14"/>
+                                    <TextBlock Text="Face margin (default 12%)" Style="{StaticResource SmallLabel}"/>
+                                    <Slider x:Name="FacePaddingSlider" Minimum="0" Maximum="0.3" Value="0.12" SmallChange="0.01" LargeChange="0.05" ValueChanged="SettingChanged" Margin="0,0,0,10"/>
+                                    <CheckBox x:Name="LocalFaceGuardCheck" Content="Expanded local guards for uncertain faces" Click="SettingChanged"/>
+                                    <TextBlock Text="Face masks keep the full detected face plus a local margin. Uncertain candidates add 12% once. Disable local guards for strict full-screen uncertainty cover. Capture/inference failures still hide the screen." Style="{StaticResource Muted}" Margin="0,4,0,14"/>
+                                    <Grid Margin="0,0,0,14">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel>
+                                            <TextBlock Text="Anatomical confidence" Style="{StaticResource SmallLabel}"/>
+                                            <Slider x:Name="ConfidenceSlider" Minimum="0.05" Maximum="0.95"
+                                                    SmallChange="0.01" LargeChange="0.05" Value="0.35"
+                                                    ValueChanged="SettingChanged"/>
+                                        </StackPanel>
+                                        <Border Grid.Column="1" Style="{StaticResource ValueBox}" VerticalAlignment="Bottom">
+                                            <TextBlock x:Name="ConfidenceValue" Text="0.35" FontSize="12"/>
+                                        </Border>
+                                    </Grid>
+                                    <Grid Margin="0,0,0,14">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel>
+                                            <TextBlock Text="NMS IoU" Style="{StaticResource SmallLabel}"/>
+                                            <Slider x:Name="NmsSlider" Minimum="0.1" Maximum="0.9"
+                                                    SmallChange="0.01" LargeChange="0.05" Value="0.45"
+                                                    ValueChanged="SettingChanged"/>
+                                        </StackPanel>
+                                        <Border Grid.Column="1" Style="{StaticResource ValueBox}" VerticalAlignment="Bottom">
+                                            <TextBlock x:Name="NmsValue" Text="0.45" FontSize="12"/>
+                                        </Border>
+                                    </Grid>
+                                    <Grid Margin="0,0,0,14">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel>
+                                            <TextBlock Text="Person detector confidence" Style="{StaticResource SmallLabel}"/>
+                                            <Slider x:Name="PersonConfSlider" Minimum="0.05" Maximum="0.95"
+                                                    SmallChange="0.01" LargeChange="0.05" Value="0.35"
+                                                    ValueChanged="SettingChanged"/>
+                                        </StackPanel>
+                                        <Border Grid.Column="1" Style="{StaticResource ValueBox}" VerticalAlignment="Bottom">
+                                            <TextBlock x:Name="PersonConfValue" Text="0.35" FontSize="12"/>
+                                        </Border>
+                                    </Grid>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel>
+                                            <TextBlock Text="Whole-body confidence" Style="{StaticResource SmallLabel}"/>
+                                            <Slider x:Name="WholeBodyConfSlider" Minimum="0.05" Maximum="0.95"
+                                                    SmallChange="0.01" LargeChange="0.05" Value="0.5"
+                                                    ValueChanged="SettingChanged"/>
+                                        </StackPanel>
+                                        <Border Grid.Column="1" Style="{StaticResource ValueBox}" VerticalAlignment="Bottom">
+                                            <TextBlock x:Name="WholeBodyConfValue" Text="0.50" FontSize="12"/>
+                                        </Border>
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+                            <Border Grid.Column="1" Style="{StaticResource Card}" Margin="10,0,0,0">
+                                <StackPanel>
+                                    <TextBlock Text="WHOLE-PERSON MODE" Style="{StaticResource SectionTitle}"/>
+                                    <CheckBox x:Name="WholeBodyCheck" Content="Censor whole tracked people"
+                                              Click="SettingChanged"/>
+                                    <TextBlock Style="{StaticResource Muted}" Margin="0,6,0,12"
+                                               Text="Uses the person detector plus MediaPipe selfie segmentation. It is intentionally conservative and will treat an entire person as sensitive when evidence overlaps."/>
+                                    <CheckBox x:Name="NudeOnlyCheck" Content="Only people with nearby exposed evidence"
+                                              Click="SettingChanged" Margin="0,0,0,8"/>
+                                    <StackPanel Orientation="Horizontal">
+                                        <CheckBox x:Name="WholeBodyFemaleCheck" Content="Female subjects" Click="SettingChanged"/>
+                                        <CheckBox x:Name="WholeBodyMaleCheck" Content="Male subjects" Click="SettingChanged"
+                                                  Margin="18,0,0,0"/>
+                                    </StackPanel>
+                                    <Border Style="{StaticResource Divider}"/>
+                                    <TextBlock Text="DEBUG" Style="{StaticResource SectionTitle}"/>
+                                    <CheckBox x:Name="DebugBoxesCheck" Content="Show tracked region boxes" Click="SettingChanged"/>
+                                    <CheckBox x:Name="DebugLabelsCheck" Content="Show subject IDs and region labels"
+                                              Click="SettingChanged" Margin="0,8,0,0"/>
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <TextBlock Text="WHAT THE MODEL CAN AND CANNOT DO" Style="{StaticResource SectionTitle}"/>
+                                <TextBlock Style="{StaticResource Muted}"
+                                           Text="NudeNet 320n predicts exposed and covered anatomy but has known gender/class confusion (for example, a male chest can be labelled as female breasts). YOLOv8n finds people, not nudity. MediaPipe produces a person silhouette, not clothing. The app never fabricates additional detector classes."/>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+
+                    <!-- CENSORING -->
+                    <StackPanel x:Name="PageCensoring" Visibility="Collapsed">
+                        <Grid Margin="0,0,0,16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="1.05*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Margin="0,0,10,0">
+                                <Border Style="{StaticResource Card}" Margin="0,0,0,14">
+                                    <StackPanel>
+                                        <TextBlock Text="STYLE" Style="{StaticResource SectionTitle}"/>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <ComboBox x:Name="StyleCombo" SelectionChanged="SettingChanged">
+                                                <ComboBoxItem Content="Solid fill" Tag="Solid"/>
+                                                <ComboBoxItem Content="Blur" Tag="Blur"/>
+                                                <ComboBoxItem Content="Pixelate" Tag="Pixelate"/>
+                                                <ComboBoxItem Content="Custom image" Tag="Image"/>
+                                                <ComboBoxItem Content="Text label" Tag="Text"/>
+                                                <ComboBoxItem Content="Outline + veil" Tag="Outline"/>
+                                                <ComboBoxItem Content="Silhouette" Tag="Silhouette"/>
+                                                <ComboBoxItem Content="Marker tape" Tag="Marker"/>
+                                                <ComboBoxItem Content="Night vision" Tag="NightVision"/>
+                                                <ComboBoxItem Content="Frosted glass" Tag="FrostedGlass"/>
+                                            </ComboBox>
+                                            <TextBlock Grid.Column="1" Text="Live" FontSize="11"
+                                                       Foreground="{StaticResource GoodBrush}" VerticalAlignment="Center"
+                                                       Margin="10,0,0,0"/>
+                                        </Grid>
+
+                                        <Grid Margin="0,14,0,0">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel>
+                                                <TextBlock Text="Opacity" Style="{StaticResource SmallLabel}"/>
+                                                <Slider x:Name="OpacitySlider" Minimum="0.1" Maximum="1"
+                                                        SmallChange="0.01" Value="1" ValueChanged="SettingChanged"/>
+                                            </StackPanel>
+                                            <Border Grid.Column="1" Style="{StaticResource ValueBox}" VerticalAlignment="Bottom">
+                                                <TextBlock x:Name="OpacityValue" Text="100%" FontSize="12"/>
+                                            </Border>
+                                        </Grid>
+                                        <Grid Margin="0,12,0,0">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel>
+                                                <TextBlock Text="Corner radius" Style="{StaticResource SmallLabel}"/>
+                                                <Slider x:Name="CornerSlider" Minimum="0" Maximum="48"
+                                                        SmallChange="1" Value="3" ValueChanged="SettingChanged"/>
+                                            </StackPanel>
+                                            <Border Grid.Column="1" Style="{StaticResource ValueBox}" VerticalAlignment="Bottom">
+                                                <TextBlock x:Name="CornerValue" Text="3" FontSize="12"/>
+                                            </Border>
+                                        </Grid>
+
+                                        <Grid Margin="0,14,0,0">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="10"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel>
+                                                <TextBlock Text="Fill colour" Style="{StaticResource SmallLabel}"/>
+                                                <TextBox x:Name="ColorBox" Text="#0B0D12" TextChanged="SettingChanged"/>
+                                            </StackPanel>
+                                            <StackPanel Grid.Column="2">
+                                                <TextBlock Text="Border colour" Style="{StaticResource SmallLabel}"/>
+                                                <TextBox x:Name="BorderColorBox" Text="#FFFFFF" TextChanged="SettingChanged"/>
+                                            </StackPanel>
+                                        </Grid>
+                                    </StackPanel>
+                                </Border>
+
+                                <Border Style="{StaticResource Card}">
+                                    <StackPanel>
+                                        <TextBlock Text="STYLE PARAMETERS" Style="{StaticResource SectionTitle}"/>
+                                        <Grid Margin="0,0,0,12">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel>
+                                                <TextBlock Text="Blur radius" Style="{StaticResource SmallLabel}"/>
+                                                <Slider x:Name="BlurSlider" Minimum="0" Maximum="80"
+                                                        SmallChange="1" Value="18" ValueChanged="SettingChanged"/>
+                                            </StackPanel>
+                                            <Border Grid.Column="1" Style="{StaticResource ValueBox}" VerticalAlignment="Bottom">
+                                                <TextBlock x:Name="BlurValue" Text="18" FontSize="12"/>
+                                            </Border>
+                                        </Grid>
+                                        <Grid Margin="0,0,0,12">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel>
+                                                <TextBlock Text="Pixel block" Style="{StaticResource SmallLabel}"/>
+                                                <Slider x:Name="PixelSlider" Minimum="2" Maximum="96"
+                                                        SmallChange="1" Value="14" ValueChanged="SettingChanged"/>
+                                            </StackPanel>
+                                            <Border Grid.Column="1" Style="{StaticResource ValueBox}" VerticalAlignment="Bottom">
+                                                <TextBlock x:Name="PixelValue" Text="14" FontSize="12"/>
+                                            </Border>
+                                        </Grid>
+                                        <TextBlock Text="Text label" Style="{StaticResource SmallLabel}"/>
+                                        <TextBox x:Name="CustomTextBox" Text="HIDDEN" TextChanged="SettingChanged"/>
+                                        <TextBlock Text="Image path" Style="{StaticResource SmallLabel}" Margin="0,12,0,5"/>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBox x:Name="ImagePathBox" Text="" TextChanged="SettingChanged"/>
+                                            <Button Grid.Column="1" Content="Browse" Style="{StaticResource GhostButton}"
+                                                    Margin="8,0,0,0" Click="BrowseImage_Click"/>
+                                        </Grid>
+                                        <TextBlock Text="Corner radius is clamped geometrically. Outline and marker remain obscuring styles, not transparent annotations."
+                                                   Style="{StaticResource Muted}" Margin="0,10,0,0"/>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+
+                            <StackPanel Grid.Column="1">
+                                <Border Style="{StaticResource Card}" Margin="0,0,0,14">
+                                    <StackPanel>
+                                        <TextBlock Text="LIVE STYLE PREVIEW" Style="{StaticResource SectionTitle}"/>
+                                        <Border Background="#0E1118" CornerRadius="10" ClipToBounds="True"
+                                                Height="210" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1">
+                                            <Grid x:Name="PreviewHost" ClipToBounds="True"/>
+                                        </Border>
+                                        <TextBlock Text="The preview uses a generated test image, not your desktop. The real overlay uses the same renderer with captured pixels."
+                                                   Style="{StaticResource Muted}" Margin="0,9,0,0"/>
+                                    </StackPanel>
+                                </Border>
+                                <Border Style="{StaticResource Card}" Margin="0,0,0,14">
+                                    <StackPanel>
+                                        <TextBlock Text="TRACKING &amp; PREDICTION" Style="{StaticResource SectionTitle}"/>
+                                        <Grid Margin="0,0,0,12">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel>
+                                                <TextBlock Text="Motion padding" Style="{StaticResource SmallLabel}"/>
+                                                <Slider x:Name="MotionSlider" Minimum="0" Maximum="1"
+                                                        SmallChange="0.01" Value="0.18" ValueChanged="SettingChanged"/>
+                                            </StackPanel>
+                                            <Border Grid.Column="1" Style="{StaticResource ValueBox}" VerticalAlignment="Bottom">
+                                                <TextBlock x:Name="MotionValue" Text="18%" FontSize="12"/>
+                                            </Border>
+                                        </Grid>
+                                        <Grid Margin="0,0,0,12">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel>
+                                                <TextBlock Text="Prediction horizon (ms)" Style="{StaticResource SmallLabel}"/>
+                                                <Slider x:Name="HorizonSlider" Minimum="0" Maximum="300"
+                                                        SmallChange="5" Value="80" ValueChanged="SettingChanged"/>
+                                            </StackPanel>
+                                            <Border Grid.Column="1" Style="{StaticResource ValueBox}" VerticalAlignment="Bottom">
+                                                <TextBlock x:Name="HorizonValue" Text="80" FontSize="12"/>
+                                            </Border>
+                                        </Grid>
+                                        <Grid Margin="0,0,0,12">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel>
+                                                <TextBlock Text="Track persistence (ms)" Style="{StaticResource SmallLabel}"/>
+                                                <Slider x:Name="PersistenceSlider" Minimum="0" Maximum="3000"
+                                                        SmallChange="25" Value="550" ValueChanged="SettingChanged"/>
+                                            </StackPanel>
+                                            <Border Grid.Column="1" Style="{StaticResource ValueBox}" VerticalAlignment="Bottom">
+                                                <TextBlock x:Name="PersistenceValue" Text="550" FontSize="12"/>
+                                            </Border>
+                                        </Grid>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel>
+                                                <TextBlock Text="Mask expansion (px)" Style="{StaticResource SmallLabel}"/>
+                                                <Slider x:Name="ExpansionSlider" Minimum="0" Maximum="96"
+                                                        SmallChange="1" Value="6" ValueChanged="SettingChanged"/>
+                                            </StackPanel>
+                                            <Border Grid.Column="1" Style="{StaticResource ValueBox}" VerticalAlignment="Bottom">
+                                                <TextBlock x:Name="ExpansionValue" Text="6" FontSize="12"/>
+                                            </Border>
+                                        </Grid>
+                                    </StackPanel>
+                                </Border>
+                                <Border Style="{StaticResource Card}">
+                                    <StackPanel>
+                                        <TextBlock Text="FAIL-CLOSED" Style="{StaticResource SectionTitle}"/>
+                                        <CheckBox x:Name="FailClosedCheck" Content="Hide the entire display if protection is uncertain"
+                                                  Click="SettingChanged" IsChecked="True"/>
+                                        <TextBlock Style="{StaticResource Muted}" Margin="0,7,0,12"
+                                                   Text="Covers the display when there has been no successful analysis, repeated model errors, or stale capture. This is a safety net, not a substitute for detection."/>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel>
+                                                <TextBlock Text="Trigger after (ms)" Style="{StaticResource SmallLabel}"/>
+                                                <Slider x:Name="FailDelaySlider" Minimum="0" Maximum="10000"
+                                                        SmallChange="100" Value="1500" ValueChanged="SettingChanged"/>
+                                            </StackPanel>
+                                            <Border Grid.Column="1" Style="{StaticResource ValueBox}" VerticalAlignment="Bottom">
+                                                <TextBlock x:Name="FailDelayValue" Text="1500" FontSize="12"/>
+                                            </Border>
+                                        </Grid>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                        </Grid>
+                    </StackPanel>
+
+                    <!-- DISPLAYS -->
+                    <StackPanel x:Name="PageDisplays" Visibility="Collapsed">
+                        <Border Style="{StaticResource Card}" Margin="0,0,0,16">
+                            <StackPanel>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel>
+                                        <TextBlock Text="DISPLAYS" Style="{StaticResource SectionTitle}"/>
+                                        <TextBlock Text="Each selected display gets its own WGC capture, tracker and click-through overlay. Coordinates are physical pixels."
+                                                   Style="{StaticResource Muted}"/>
+                                    </StackPanel>
+                                    <Button Grid.Column="1" Content="Refresh displays" Style="{StaticResource GhostButton}"
+                                            Click="RefreshDisplays_Click" VerticalAlignment="Top"/>
+                                </Grid>
+                                <Border Style="{StaticResource Divider}"/>
+                                <StackPanel x:Name="DisplaysPanel"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource Card}" Margin="0,0,0,16">
+                            <StackPanel>
+                                <TextBlock Text="CAPTURE OPTIONS" Style="{StaticResource SectionTitle}"/>
+                                <CheckBox x:Name="CaptureCursorCheck" Content="Include the mouse cursor in captured frames"
+                                          Click="SettingChanged"/>
+                                <TextBlock Style="{StaticResource Muted}" Margin="0,8,0,0"
+                                           Text="Windows Graphics Capture is used directly through D3D11. The cursor is disabled by default so it cannot become part of a censored region by accident."/>
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <TextBlock Text="COMPATIBILITY NOTES" Style="{StaticResource SectionTitle}"/>
+                                <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,6"
+                                           Text="• Windows Graphics Capture requires Windows 10 1903+ and works on Windows 11. This build targets 10.0.19041.0."/>
+                                <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,6"
+                                           Text="• Exclusive-fullscreen games may cover topmost overlays. Borderless windowed mode is recommended."/>
+                                <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,6"
+                                           Text="• Protected DRM surfaces may capture as black. Fail-closed will cover the display instead of silently exposing it."/>
+                                <TextBlock Style="{StaticResource Muted}"
+                                           Text="• Resolution or display-mode changes require stopping and starting protection while capture sessions are rebuilt."/>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+
+                    <!-- PERFORMANCE -->
+                    <StackPanel x:Name="PagePerformance" Visibility="Collapsed">
+                        <Grid Margin="0,0,0,16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Border Style="{StaticResource Card}" Margin="0,0,10,0">
+                                <StackPanel>
+                                    <TextBlock Text="SCANNING" Style="{StaticResource SectionTitle}"/>
+                                    <TextBlock Text="Performance preset" Style="{StaticResource SmallLabel}"/>
+                                    <ComboBox x:Name="PresetCombo" SelectionChanged="PresetChanged">
+                                        <ComboBoxItem Content="Low — fastest" Tag="Low"/>
+                                        <ComboBoxItem Content="Balanced — recommended" Tag="Balanced"/>
+                                        <ComboBoxItem Content="High — 480px person model" Tag="High"/>
+                                        <ComboBoxItem Content="Custom" Tag="Custom"/>
+                                    </ComboBox>
+                                    <Grid Margin="0,14,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel>
+                                            <TextBlock Text="Person scan rate (Hz)" Style="{StaticResource SmallLabel}"/>
+                                            <Slider x:Name="ScanRateSlider" Minimum="1" Maximum="30"
+                                                    SmallChange="1" Value="12" ValueChanged="SettingChanged"/>
+                                        </StackPanel>
+                                        <Border Grid.Column="1" Style="{StaticResource ValueBox}" VerticalAlignment="Bottom">
+                                            <TextBlock x:Name="ScanRateValue" Text="12" FontSize="12"/>
+                                        </Border>
+                                    </Grid>
+                                    <Grid Margin="0,12,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel>
+                                            <TextBlock Text="Anatomical scan rate (Hz)" Style="{StaticResource SmallLabel}"/>
+                                            <Slider x:Name="BodyRateSlider" Minimum="1" Maximum="15"
+                                                    SmallChange="1" Value="6" ValueChanged="SettingChanged"/>
+                                        </StackPanel>
+                                        <Border Grid.Column="1" Style="{StaticResource ValueBox}" VerticalAlignment="Bottom">
+                                            <TextBlock x:Name="BodyRateValue" Text="6" FontSize="12"/>
+                                        </Border>
+                                    </Grid>
+                                    <Grid Margin="0,12,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel>
+                                            <TextBlock Text="Segmentation rate (Hz)" Style="{StaticResource SmallLabel}"/>
+                                            <Slider x:Name="SegRateSlider" Minimum="1" Maximum="15"
+                                                    SmallChange="1" Value="4" ValueChanged="SettingChanged"/>
+                                        </StackPanel>
+                                        <Border Grid.Column="1" Style="{StaticResource ValueBox}" VerticalAlignment="Bottom">
+                                            <TextBlock x:Name="SegRateValue" Text="4" FontSize="12"/>
+                                        </Border>
+                                    </Grid>
+                                    <CheckBox x:Name="AdaptiveCheck" Content="Reduce work on static scenes" Click="SettingChanged"
+                                              Margin="0,14,0,0" IsChecked="True"/>
+                                    <TextBlock Style="{StaticResource Muted}" Margin="0,5,0,0"
+                                               Text="Static-scene detection uses a 64×36 grayscale thumbprint that exists only in memory; it is never written to disk."/>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Grid.Column="1" Style="{StaticResource Card}" Margin="10,0,0,0">
+                                <StackPanel>
+                                    <TextBlock Text="MODEL EXECUTION" Style="{StaticResource SectionTitle}"/>
+                                    <CheckBox x:Name="DirectMlCheck" Content="Try DirectML (GPU) execution first"
+                                              Click="SettingChanged"/>
+                                    <TextBlock Foreground="{StaticResource WarnBrush}" TextWrapping="Wrap" FontSize="11.5"
+                                               Margin="0,6,0,14"
+                                               Text="Measured on this Intel Iris Plus laptop: DirectML takes ~46.6 s to load and ~27.7 s for the first NudeNet pass, versus ~0.3 s CPU load. Steady state is ~41 ms GPU vs ~54–67 ms CPU. CPU is the default for predictable startup."/>
+                                    <TextBlock Text="Inference threads (0 = automatic)" Style="{StaticResource SmallLabel}"/>
+                                    <TextBox x:Name="ThreadsBox" Text="0" TextChanged="SettingChanged"/>
+                                    <Border Style="{StaticResource Divider}"/>
+                                    <TextBlock Text="LIVE MEASUREMENTS" Style="{StaticResource SectionTitle}"/>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="Provider" Style="{StaticResource Muted}"/>
+                                        <TextBlock x:Name="PerfProvider" Grid.Column="1" Text="—" FontSize="12"/>
+                                    </Grid>
+                                    <Grid Margin="0,6,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="Analysis P50 / P95" Style="{StaticResource Muted}"/>
+                                        <TextBlock x:Name="PerfLatency" Grid.Column="1" Text="—" FontSize="12"/>
+                                    </Grid>
+                                    <Grid Margin="0,6,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="Capture / analysis FPS" Style="{StaticResource Muted}"/>
+                                        <TextBlock x:Name="PerfFps" Grid.Column="1" Text="—" FontSize="12"/>
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <TextBlock Text="MEASURED ON THIS MACHINE — NOT A MARKETING BENCHMARK" Style="{StaticResource SectionTitle}"/>
+                                <TextBlock Style="{StaticResource Muted}"
+                                           Text="Intel Core i7-1065G7, 16 GB RAM, Intel Iris Plus, Windows 11 26200, 2560×1600 @ 150%. bus.jpg CPU: model load ~281 ms; steady state ~54–67 ms per full pass (person ~25–31 ms, NudeNet ~22–27 ms, preprocess ~5–10 ms). See docs/BENCHMARKS.md for dates and methodology."/>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+
+                    <!-- EXPORT -->
+                    <StackPanel x:Name="PageExport" Visibility="Collapsed">
+                        <Border Style="{StaticResource Card}" Margin="0,0,0,16">
+                            <StackPanel>
+                                <TextBlock Text="EXPORT DIRECTORY" Style="{StaticResource SectionTitle}"/>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox x:Name="ExportDirBox" Text="" TextChanged="SettingChanged"/>
+                                    <Button Grid.Column="1" Content="Browse" Style="{StaticResource GhostButton}"
+                                            Margin="8,0,0,0" Click="BrowseExportDir_Click"/>
+                                    <Button Grid.Column="2" Content="Open" Style="{StaticResource GhostButton}"
+                                            Margin="8,0,0,0" Click="OpenExportDir_Click"/>
+                                </Grid>
+                                <TextBlock Style="{StaticResource Muted}" Margin="0,7,0,0"
+                                           Text="Empty uses Pictures\VeilDesk. Exports never leave the machine unless you move them."/>
+                            </StackPanel>
+                        </Border>
+
+                        <Grid Margin="0,0,0,16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Border Style="{StaticResource Card}" Margin="0,0,10,0">
+                                <StackPanel>
+                                    <TextBlock Text="SCREENSHOT" Style="{StaticResource SectionTitle}"/>
+                                    <TextBlock Text="Display" Style="{StaticResource SmallLabel}"/>
+                                    <ComboBox x:Name="ExportMonitorCombo"/>
+                                    <CheckBox x:Name="ExportCensoredCheck" Content="Composite censorship into the image"
+                                              IsChecked="True" Margin="0,12,0,0"/>
+                                    <Button Content="Save censored screenshot" Style="{StaticResource PrimaryButton}"
+                                            Margin="0,14,0,0" Click="Screenshot_Click"/>
+                                    <TextBlock x:Name="ExportStatus" Style="{StaticResource Muted}" Margin="0,10,0,0"/>
+                                </StackPanel>
+                            </Border>
+                            <Border Grid.Column="1" Style="{StaticResource Card}" Margin="10,0,0,0">
+                                <StackPanel>
+                                    <TextBlock Text="VIDEO" Style="{StaticResource SectionTitle}"/>
+                                    <TextBlock Style="{StaticResource Muted}"
+                                               Text="Record a local MJPEG AVI at 1280×800 (or the display size if smaller), 15 fps, with censorship composited into every frame. No ffmpeg, no network, no audio."/>
+                                    <CheckBox x:Name="RecordCensoredCheck" Content="Composite censorship into video frames"
+                                              IsChecked="True" Margin="0,12,0,0"/>
+                                    <Button x:Name="RecordButton" Content="Start recording" Style="{StaticResource PrimaryButton}"
+                                            Margin="0,14,0,0" Click="Record_Click"/>
+                                    <TextBlock x:Name="RecordStatus" Style="{StaticResource Muted}" Margin="0,10,0,0"/>
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <TextBlock Text="PROVENANCE" Style="{StaticResource SectionTitle}"/>
+                                <TextBlock Style="{StaticResource Muted}"
+                                           Text="Every exported file is generated from frames captured by this process. The overlay is excluded from WGC, so screenshots use the original frame plus the same local renderer; they are not a screen grab of the overlay."/>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+
+                    <!-- PACKS -->
+                    <StackPanel x:Name="PagePacks" Visibility="Collapsed">
+                        <Border Style="{StaticResource Card}" Margin="0,0,0,16">
+                            <StackPanel>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel>
+                                        <TextBlock Text="INSTALLED PACKS" Style="{StaticResource SectionTitle}"/>
+                                        <TextBlock Style="{StaticResource Muted}"
+                                                   Text="Packs are inert ZIP archives validated by the app: bounded size, path traversal rejected, only image/audio/text/font/JSON assets allowed, no executables, no scripts."/>
+                                    </StackPanel>
+                                    <Button Grid.Column="1" Content="Import .veilpack" Style="{StaticResource GhostButton}"
+                                            Margin="10,0,0,0" Click="ImportPack_Click" VerticalAlignment="Top"/>
+                                    <Button Grid.Column="2" Content="Open folder" Style="{StaticResource GhostButton}"
+                                            Margin="8,0,0,0" Click="OpenPacksFolder_Click" VerticalAlignment="Top"/>
+                                </Grid>
+                                <Border Style="{StaticResource Divider}"/>
+                                <StackPanel x:Name="PacksPanel"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <TextBlock Text="BUILT-IN STYLE PACKS" Style="{StaticResource SectionTitle}"/>
+                                <TextBlock Style="{StaticResource Muted}"
+                                           Text="Built-in packs are shipped as manifest + JSON settings and copied to the packs folder on first run. Applying a pack only changes detection/censoring style; it never changes capture displays or security settings."/>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+
+                    <!-- SESSIONS -->
+                    <StackPanel x:Name="PageSessions" Visibility="Collapsed">
+                        <UniformGrid Columns="4" Margin="0,0,0,16">
+                            <Border Style="{StaticResource Card}" Margin="0,0,10,0">
+                                <StackPanel>
+                                    <TextBlock Text="SESSIONS" Style="{StaticResource SectionTitle}"/>
+                                    <TextBlock x:Name="SessionCount" Text="0" Style="{StaticResource StatValue}"/>
+                                </StackPanel>
+                            </Border>
+                            <Border Style="{StaticResource Card}" Margin="0,0,10,0">
+                                <StackPanel>
+                                    <TextBlock Text="TOTAL TIME" Style="{StaticResource SectionTitle}"/>
+                                    <TextBlock x:Name="SessionTotal" Text="0m" Style="{StaticResource StatValue}"/>
+                                </StackPanel>
+                            </Border>
+                            <Border Style="{StaticResource Card}" Margin="0,0,10,0">
+                                <StackPanel>
+                                    <TextBlock Text="DETECTIONS" Style="{StaticResource SectionTitle}"/>
+                                    <TextBlock x:Name="SessionDetections" Text="0" Style="{StaticResource StatValue}"/>
+                                </StackPanel>
+                            </Border>
+                            <Border Style="{StaticResource Card}">
+                                <StackPanel>
+                                    <TextBlock Text="STREAK" Style="{StaticResource SectionTitle}"/>
+                                    <TextBlock x:Name="SessionStreak" Text="0 days" Style="{StaticResource StatValue}"/>
+                                </StackPanel>
+                            </Border>
+                        </UniformGrid>
+                        <Border Style="{StaticResource Card}" Margin="0,0,0,16">
+                            <StackPanel>
+                                <TextBlock Text="ACHIEVEMENTS" Style="{StaticResource SectionTitle}"/>
+                                <StackPanel x:Name="AchievementsPanel"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="RECENT SESSIONS" Style="{StaticResource SectionTitle}"/>
+                                    <Button Grid.Column="1" Content="Clear history" Style="{StaticResource DangerButton}"
+                                            Click="ClearSessions_Click" Padding="10,5" FontSize="11"/>
+                                </Grid>
+                                <StackPanel x:Name="SessionsPanel"/>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+
+                    <!-- SETTINGS -->
+                    <StackPanel x:Name="PageSettings" Visibility="Collapsed">
+                        <Grid Margin="0,0,0,16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Border Style="{StaticResource Card}" Margin="0,0,10,0">
+                                <StackPanel>
+                                    <TextBlock Text="APPEARANCE" Style="{StaticResource SectionTitle}"/>
+                                    <TextBlock Text="Language" Style="{StaticResource SmallLabel}"/>
+                                    <ComboBox x:Name="LanguageCombo" SelectionChanged="SettingChanged">
+                                        <ComboBoxItem Content="English" Tag="en"/>
+                                        <ComboBoxItem Content="한국어 (coming soon)" Tag="ko" IsEnabled="False"/>
+                                    </ComboBox>
+                                    <TextBlock Text="Theme" Style="{StaticResource SmallLabel}" Margin="0,12,0,5"/>
+                                    <ComboBox x:Name="ThemeCombo" SelectionChanged="SettingChanged">
+                                        <ComboBoxItem Content="Midnight" Tag="Midnight"/>
+                                        <ComboBoxItem Content="Graphite (coming soon)" Tag="Graphite" IsEnabled="False"/>
+                                    </ComboBox>
+                                    <CheckBox x:Name="StartMinimizedCheck" Content="Start minimized"
+                                              Margin="0,14,0,0" Click="SettingChanged"/>
+                                    <CheckBox x:Name="CloseToTrayCheck" Content="Close to tray instead of exiting"
+                                              Margin="0,8,0,0" IsEnabled="False" ToolTip="Tray support is not enabled in this build."/>
+                                </StackPanel>
+                            </Border>
+                            <Border Grid.Column="1" Style="{StaticResource Card}" Margin="10,0,0,0">
+                                <StackPanel>
+                                    <TextBlock Text="PRIVACY" Style="{StaticResource SectionTitle}"/>
+                                    <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,8"
+                                               Text="• No telemetry, accounts, subscriptions or remote inference."/>
+                                    <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,8"
+                                               Text="• Discord presence is disabled and not implemented."/>
+                                    <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,8"
+                                               Text="• Settings and session history live under LocalAppData\VeilDesk."/>
+                                    <TextBlock Style="{StaticResource Muted}"
+                                               Text="• Setting VEILDESK_HOME or adding portable.flag beside the executable changes the data root. Models are read-only files."/>
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+                        <Border Style="{StaticResource Card}" Margin="0,0,0,16">
+                            <StackPanel>
+                                <TextBlock Text="DATA LOCATIONS" Style="{StaticResource SectionTitle}"/>
+                                <Grid Margin="0,0,0,8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="110"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="Data root" Style="{StaticResource Muted}"/>
+                                    <TextBlock x:Name="DataRootText" Grid.Column="1" FontSize="12" TextTrimming="CharacterEllipsis"/>
+                                    <Button Grid.Column="2" Content="Open" Style="{StaticResource GhostButton}"
+                                            Padding="10,4" Click="OpenDataFolder_Click"/>
+                                </Grid>
+                                <Grid Margin="0,0,0,8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="110"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="Models" Style="{StaticResource Muted}"/>
+                                    <TextBlock x:Name="ModelsPathText" Grid.Column="1" FontSize="12" TextTrimming="CharacterEllipsis"/>
+                                    <Button Grid.Column="2" Content="Open" Style="{StaticResource GhostButton}"
+                                            Padding="10,4" Click="OpenModelsFolder_Click"/>
+                                </Grid>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="110"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="Settings file" Style="{StaticResource Muted}"/>
+                                    <TextBlock x:Name="SettingsPathText" Grid.Column="1" FontSize="12" TextTrimming="CharacterEllipsis"/>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <TextBlock Text="MAINTENANCE" Style="{StaticResource SectionTitle}"/>
+                                <StackPanel Orientation="Horizontal">
+                                    <Button Content="Save settings now" Style="{StaticResource PrimaryButton}"
+                                            Click="SaveSettings_Click"/>
+                                    <Button Content="Reset to defaults" Style="{StaticResource DangerButton}"
+                                            Margin="10,0,0,0" Click="ResetSettings_Click"/>
+                                </StackPanel>
+                                <TextBlock x:Name="SettingsStatus" Style="{StaticResource Muted}" Margin="0,10,0,0"/>
+                                <TextBlock Style="{StaticResource Muted}" Margin="0,8,0,0"
+                                           Text="Changing scan rates or the provider while protection is running takes effect on the next Start. Style, thresholds and fail-closed changes apply live."/>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+
+                    <!-- ABOUT -->
+                    <StackPanel x:Name="PageAbout" Visibility="Collapsed">
+                        <Border Style="{StaticResource Card}" Margin="0,0,0,16">
+                            <StackPanel>
+                                <TextBlock Text="VEILDESK 1.0" Style="{StaticResource SectionTitle}"/>
+                                <TextBlock Text="A local, privacy-first real-time censor for Windows."
+                                           FontSize="20" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                                <TextBlock Style="{StaticResource Muted}"
+                                           Text="C#/.NET 8 WPF · Windows Graphics Capture · ONNX Runtime · NudeNet 320n · YOLOv8n · MediaPipe Selfie Segmentation. All processing stays in this process. No network client is initialized by the protection pipeline."/>
+                                <Border Style="{StaticResource Divider}"/>
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="140"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="Version" Style="{StaticResource Muted}"/>
+                                    <TextBlock Grid.Column="1" x:Name="AboutVersion" FontSize="12"/>
+                                    <TextBlock Grid.Row="1" Text="Runtime" Style="{StaticResource Muted}" Margin="0,7,0,0"/>
+                                    <TextBlock Grid.Row="1" Grid.Column="1" x:Name="AboutRuntime" FontSize="12" Margin="0,7,0,0"/>
+                                    <TextBlock Grid.Row="2" Text="Provider" Style="{StaticResource Muted}" Margin="0,7,0,0"/>
+                                    <TextBlock Grid.Row="2" Grid.Column="1" x:Name="AboutProvider" FontSize="12" Margin="0,7,0,0"/>
+                                    <TextBlock Grid.Row="3" Text="Models" Style="{StaticResource Muted}" Margin="0,7,0,0"/>
+                                    <TextBlock Grid.Row="3" Grid.Column="1" x:Name="AboutModels" FontSize="12" Margin="0,7,0,0"
+                                               TextWrapping="Wrap"/>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+
+                        <Grid Margin="0,0,0,16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Border Style="{StaticResource Card}" Margin="0,0,10,0">
+                                <StackPanel>
+                                    <TextBlock Text="LICENCES &amp; PROVENANCE" Style="{StaticResource SectionTitle}"/>
+                                    <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,7"
+                                               Text="VeilDesk is AGPL-3.0-or-later because it incorporates NudeNet and Ultralytics YOLO weights/code under AGPL-3.0. MediaPipe Selfie Segmentation is Apache-2.0. Exact hashes are in models/manifest.json and docs/REFERENCE_EVIDENCE.md."/>
+                                    <TextBlock Style="{StaticResource Muted}"
+                                               Text="No proprietary Beta Blocker source, assets, logos, names or license mechanisms are used. The product is an independent implementation of publicly described ideas."/>
+                                </StackPanel>
+                            </Border>
+                            <Border Grid.Column="1" Style="{StaticResource Card}" Margin="10,0,0,0">
+                                <StackPanel>
+                                    <TextBlock Text="KNOWN LIMITATIONS" Style="{StaticResource SectionTitle}"/>
+                                    <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,6"
+                                               Text="• NudeNet has gender/class confusion and misses unusual poses."/>
+                                    <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,6"
+                                               Text="• Overlay geometry/DPI and screenshot compositing are tested; live visual alignment and moving-target checks remain pending."/>
+                                    <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,6"
+                                               Text="• DRM/secure windows can appear black to capture; such content cannot be verified."/>
+                                    <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,6"
+                                               Text="• Video export is MJPEG AVI, no audio; not H.264."/>
+                                    <TextBlock Style="{StaticResource Muted}"
+                                               Text="• Some secondary features (tray, cloud sync, Discord) are intentionally absent."/>
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <TextBlock Text="DIAGNOSTICS" Style="{StaticResource SectionTitle}"/>
+                                <TextBox x:Name="DiagnosticsBox" IsReadOnly="True" AcceptsReturn="True"
+                                         FontFamily="Cascadia Mono, Consolas" FontSize="11.5" Height="190"
+                                         VerticalScrollBarVisibility="Auto" TextWrapping="NoWrap"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                                    <Button Content="Copy diagnostics" Style="{StaticResource GhostButton}"
+                                            Click="CopyDiagnostics_Click"/>
+                                    <Button Content="Run capture probe" Style="{StaticResource GhostButton}"
+                                            Margin="8,0,0,0" Click="RunProbe_Click"/>
+                                    <Button Content="Open docs" Style="{StaticResource GhostButton}"
+                                            Margin="8,0,0,0" Click="OpenDocs_Click"/>
+                                </StackPanel>
+                                <TextBlock x:Name="ProbeStatus" Style="{StaticResource Muted}" Margin="0,9,0,0"/>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+
+                </Grid>
+            </ScrollViewer>
+        </Grid>
+    </Grid>
+</Window>
