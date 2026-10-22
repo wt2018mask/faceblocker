@@ -299,6 +299,7 @@ internal sealed class CensorVisual : Grid
     {
         var c = settings.Censoring;
         var isFailClosed = region.Kind == CensorRegionKind.FailClosed;
+        var isSafetyCover = isFailClosed || region.Kind == CensorRegionKind.UncertainFace;
         // The safety cover always spans the whole output. Clipping it against
         // the region box could produce an empty rectangle on a secondary
         // display and leave that screen completely uncensored.
@@ -320,7 +321,7 @@ internal sealed class CensorVisual : Grid
         Canvas.SetLeft(this, left);
         Canvas.SetTop(this, top);
 
-        var radius = isFailClosed ? 0 : Math.Min(Math.Min(width, height) / 2, c.CornerRadius);
+        var radius = isSafetyCover ? 0 : Math.Min(Math.Min(width, height) / 2, c.CornerRadius);
         Clip = new RectangleGeometry(new Rect(0, 0, width, height), radius, radius);
         _fill.CornerRadius = new CornerRadius(radius);
         _outline.CornerRadius = new CornerRadius(radius);
@@ -329,9 +330,9 @@ internal sealed class CensorVisual : Grid
         _image.Width = _tint.Width = width;
         _image.Height = _tint.Height = height;
 
-        var style = isFailClosed ? CensorStyle.Solid : c.Style;
-        var color = ParseColor(isFailClosed ? "#03040A" : c.Color);
-        var opacity = isFailClosed ? 1.0 : Math.Clamp(c.Opacity, 0.1, 1.0);
+        var style = isSafetyCover ? CensorStyle.Solid : c.Style;
+        var color = ParseColor(isFailClosed ? "#03040A" : isSafetyCover ? "#000000" : c.Color);
+        var opacity = isSafetyCover ? 1.0 : Math.Clamp(c.Opacity, 0.1, 1.0);
         var showLabel = settings.Censoring.ShowSubjectLabels && region.TrackId is not null;
         _solid.Color = color;
 

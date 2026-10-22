@@ -19,7 +19,11 @@ public sealed record AnalysisResult(
     double SegmentMs,
     double TotalMs,
     bool SegmentationRan,
-    string? Error);
+    string? Error)
+{
+    public IReadOnlyList<Detection> FaceDetections { get; init; } = Array.Empty<Detection>();
+    public double FaceMs { get; init; }
+}
 
 /// <summary>
 /// One complete local analysis pass over a monitor frame: person detection,
@@ -36,6 +40,7 @@ public sealed class VisionPipeline : IDisposable
     private readonly ConfidenceGate _confidenceGate = new();
     private readonly CoverageGuard _coverageGuard = new();
     private readonly ProtectionSupervisor _supervisor = new();
+    private readonly float[] _faceInput = new float[3 * YuNetDetector.Size * YuNetDetector.Size];
     private readonly float[] _nudeInput = new float[3 * FramePreprocessor.NudeNetSize * FramePreprocessor.NudeNetSize];
     private readonly float[] _personInput;
     private readonly float[] _segInput = new float[3 * FramePreprocessor.SegmentationSize * FramePreprocessor.SegmentationSize];
@@ -119,25 +124,45 @@ public sealed class VisionPipeline : IDisposable
         {
             lock (_gate)
             {
+                var required = VisionPipelineOptions.ForSettings(_options.ModelDirectory, settings);
+                if ((required.EnableFace && !_options.EnableFace) ||
+                    (required.EnableNude && !_options.EnableNude) ||
+                    (required.EnablePerson && !_options.EnablePerson) ||
+                    (required.EnableSegmentation && !_options.EnableSegmentation))
+                    throw new InvalidOperationException("Targets changed. Stop and restart protection to load selected models.");
                 var personSize = _options.PersonModelSize;
 
                 var sw = Stopwatch.StartNew();
-                FramePreprocessor.PreprocessYolo(frame, personSize, _personInput);
-                preprocessMs += sw.Elapsed.TotalMilliseconds;
-
-                sw.Restart();
-                var personOutput = _models.RunPerson(_personInput, personSize);
-                personMs = sw.Elapsed.TotalMilliseconds;
-
-                var personTransform = LetterboxTransform.CreateCentered(frame.Width, frame.Height, personSize, personSize);
-                var people = DetectionDecoder.DecodeYoloClass(
-                    personOutput, 4 + 80, AnchorCount(personSize), 0, personTransform,
-                    settings.Detection.PersonConfidence, settings.Detection.NmsIou);
+                IReadOnlyList<Detection> people = Array.Empty<Detection>();
+                if (settings.Detection.WholeBodyEnabled)
+                {
+                    FramePreprocessor.PreprocessYolo(frame, personSize, _personInput);
+                    preprocessMs += sw.Elapsed.TotalMilliseconds;
+                    sw.Restart();
+                    var personOutput = _models.RunPerson(_personInput, personSize);
+                    personMs = sw.Elapsed.TotalMilliseconds;
+                    var personTransform = LetterboxTransform.CreateCentered(frame.Width, frame.Height, personSize, personSize);
+                    people = DetectionDecoder.DecodeYoloClass(personOutput, 84, AnchorCount(personSize), 0,
+                        personTransform, settings.Detection.PersonConfidence, settings.Detection.NmsIou);
+                }
+                IReadOnlyList<Detection> faces = Array.Empty<Detection>();
+                double faceMs = 0;
+                if (settings.Detection.EnabledRegions.Contains(VeilDesk.Core.Detection.BodyRegion.Face))
+                {
+                    sw.Restart();
+                    YuNetDetector.Preprocess(frame, _faceInput);
+                    preprocessMs += sw.Elapsed.TotalMilliseconds;
+                    sw.Restart();
+                    faces = YuNetDetector.Decode(_models.RunFace(_faceInput), frame.Width, frame.Height,
+                        Math.Min(settings.Detection.FaceConfidence, 0.35), settings.Detection.NmsIou);
+                    faceMs = sw.Elapsed.TotalMilliseconds;
+                }
 
                 IReadOnlyList<Detection> body;
                 var bodyDue = nowMs - _lastBodyMs >=
                     1000.0 / Math.Clamp(settings.Performance.BodyScanRateHz, 1, 30);
-                if (bodyDue)
+                if (bodyDue && (settings.Detection.EnabledRegions.Any(r => (int)r < 18) ||
+                    (settings.Detection.WholeBodyEnabled && settings.Detection.WholeBodyNudeOnly)))
                 {
                     sw.Restart();
                     FramePreprocessor.PreprocessNudeNet(frame, _nudeInput);
@@ -175,7 +200,8 @@ public sealed class VisionPipeline : IDisposable
                     _lastSegmentationMs = nowMs;
                 }
 
-                var all = new List<Detection>(peopleWithMasks.Count + body.Count);
+                var all = new List<Detection>(peopleWithMasks.Count + body.Count + faces.Count);
+                all.AddRange(faces);
                 all.AddRange(peopleWithMasks);
                 all.AddRange(body);
 
@@ -199,7 +225,7 @@ public sealed class VisionPipeline : IDisposable
 
                 return new AnalysisResult(body, peopleWithMasks, tracks, regions,
                     preprocessMs, personMs, nudeMs, segmentMs, total.Elapsed.TotalMilliseconds,
-                    segmentationRan, null);
+                    segmentationRan, null) { FaceDetections = faces, FaceMs = faceMs };
             }
         }
         catch (Exception ex)
@@ -300,7 +326,14 @@ public sealed class VisionPipeline : IDisposable
             var tracks = _tracker.Snapshot();
             _confidenceGate.RetainOnly(tracks.Select(t => t.Id));
             var masks = CensorComposer.Build(tracks, settings, bounds, nowMs, false, _confidenceGate);
-            var missingCoverage = _coverageGuard.RequiresCover(tracks.Select(t => t.Id),
+            // Local face guards honour the configured hold window. Keeping an
+            // expired face in the required set would turn its planned release
+            // into a whole-screen safety pause despite fresh successful scans.
+            // Strict mode and all pre-existing anatomical rules stay unchanged.
+            var liveCoverageIds = tracks.Where(t => t.Region != BodyRegion.Face ||
+                !settings.Detection.LocalFaceUncertaintyCover ||
+                nowMs - t.LastSeenMs <= settings.Censoring.TrackPersistenceMs).Select(t => t.Id);
+            var missingCoverage = _coverageGuard.RequiresCover(liveCoverageIds,
                 masks.Where(r => r.TrackId.HasValue).Select(r => r.TrackId!.Value),
                 tracks.Where(t => !t.IsPerson && settings.Detection.EnabledRegions.Contains(t.Region) &&
                     nowMs - t.LastSeenMs <= settings.Censoring.TrackPersistenceMs).Select(t => t.Id));

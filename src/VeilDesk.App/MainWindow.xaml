@@ -135,11 +135,13 @@
                                                FontSize="25" FontWeight="SemiBold" Margin="0,8,0,6"
                                                FontFamily="Segoe UI Variable Display, Segoe UI"/>
                                     <TextBlock x:Name="HeroBody" Style="{StaticResource Muted}" MaxWidth="620"
-                                               Text="Start protection to capture selected displays with Windows Graphics Capture, run three ONNX models locally, and draw click-through censor overlays at physical-pixel coordinates."/>
+                                               Text="Choose targets, then start local desktop protection. Alt+S starts, stops, or cancels initialization. Ctrl+Shift+F10 stops protection from other applications."/>
                                     <StackPanel Orientation="Horizontal" Margin="0,18,0,0">
                                         <Button x:Name="HeroStartButton" Content="Start protection"
                                                 Style="{StaticResource PrimaryButton}" Padding="20,10"
                                                 Click="StartStop_Click"/>
+                                        <Button x:Name="FaceOnlyButton" Content="_Face only · black" Style="{StaticResource GhostButton}"
+                                                Margin="10,0,0,0" Click="FaceOnly_Click"/>
                                         <Button Content="Open settings" Style="{StaticResource GhostButton}"
                                                 Margin="10,0,0,0" Click="GoSettings_Click"/>
                                     </StackPanel>
@@ -233,10 +235,12 @@
 
                     <!-- DETECTION -->
                     <StackPanel x:Name="PageDetection" Visibility="Collapsed">
+                        <TextBlock Text="Targets can be changed while stopped. Face confidence is separate from anatomical confidence." Style="{StaticResource Muted}" Margin="0,0,0,12"/>
+
                         <Border Style="{StaticResource Card}" Margin="0,0,0,16">
                             <StackPanel>
-                                <TextBlock Text="ANATOMICAL REGIONS · NUDENET 320N" Style="{StaticResource SectionTitle}"/>
-                                <TextBlock Text="These 18 classes are genuinely predicted by the bundled model. Select what should be censored; covered classes are useful for whole-person evidence but are not nudity by themselves."
+                                <TextBlock Text="TARGETS · FACE AND ANATOMICAL REGIONS" Style="{StaticResource SectionTitle}"/>
+                                <TextBlock Text="Face uses dedicated local YuNet detection for all people. Other regions use NudeNet. Clear all, then select Face for face-only protection. Stop before changing targets."
                                            Style="{StaticResource Muted}" Margin="0,0,0,14"/>
                                 <WrapPanel x:Name="RegionPanel"/>
                                 <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
@@ -256,6 +260,10 @@
                             <Border Style="{StaticResource Card}" Margin="0,0,10,0">
                                 <StackPanel>
                                     <TextBlock Text="THRESHOLDS" Style="{StaticResource SectionTitle}"/>
+                                    <TextBlock Text="Face confidence (YuNet)" Style="{StaticResource SmallLabel}"/>
+                                    <Slider x:Name="FaceConfidenceSlider" Minimum="0.05" Maximum="0.95" Value="0.6" ValueChanged="SettingChanged" Margin="0,0,0,14"/>
+                                    <CheckBox x:Name="LocalFaceGuardCheck" Content="Expanded local guards for uncertain faces" Click="SettingChanged"/>
+                                    <TextBlock Text="Candidates below face confidence receive larger opaque black masks. Disable for strict full-screen uncertainty cover. Capture/inference failures still cover the whole screen." Style="{StaticResource Muted}" Margin="0,4,0,14"/>
                                     <Grid Margin="0,0,0,14">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*"/>

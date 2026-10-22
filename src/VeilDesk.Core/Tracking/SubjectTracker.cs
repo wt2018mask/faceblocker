@@ -54,7 +54,7 @@ public sealed class TrackedDetection
         // Uncertainty grows with time since detection and with observed speed.
         var uncertainty = motionPadding + Math.Min(0.8, speed / 3000.0) * 0.25 + Math.Min(0.4, seconds);
         predicted = predicted.ExpandFraction(uncertainty);
-        return predicted.Clip(bounds);
+        return (Region == BodyRegion.Face ? predicted.Union(Box) : predicted).Clip(bounds);
     }
 }
 
@@ -199,7 +199,9 @@ public sealed class SubjectTracker
                 if (unmatchedTracks.Contains(track.Id))
                 {
                     track.Missed++;
-                    if (track.Missed > _options.MaxMissedFrames || nowMs - track.LastSeenMs > 5000)
+                    // Face hold time is elapsed time, not the caller's inference FPS.
+                    if ((track.Region != BodyRegion.Face && track.Missed > _options.MaxMissedFrames) ||
+                        nowMs - track.LastSeenMs > 5000)
                         _tracks.RemoveAt(i);
                 }
             }

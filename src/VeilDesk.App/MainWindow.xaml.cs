@@ -31,7 +31,7 @@ public partial class MainWindow : Window
     private static readonly (string Key, string Title, string Subtitle)[] Pages =
     {
         ("Dashboard", "Dashboard", "A private, real-time censor that never sends a frame anywhere."),
-        ("Detection", "Detection", "Choose which real anatomical classes are censored and how confidently."),
+        ("Detection", "Detection", "Choose faces and anatomical regions to censor."),
         ("Censoring", "Censoring", "Styles, coordinates, motion prediction, persistence and fail-closed behaviour."),
         ("Displays", "Displays", "Select monitors, verify physical coordinates and review capture limitations."),
         ("Performance", "Performance", "Tune local inference for this machine. Numbers are measured, not claimed."),
@@ -70,6 +70,8 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        AccessKeyManager.Register("s", HeaderStartButton);
+        HeaderStartButton.ToolTip = "Alt+S: start, stop, or cancel initialization";
         _settings = _settingsStore.Load();
         _engine = new VeilDeskEngine(Dispatcher);
         _startButtons.Add(HeaderStartButton);
@@ -158,6 +160,20 @@ public partial class MainWindow : Window
         }
     }
 
+    private void FaceOnly_Click(object sender, RoutedEventArgs e)
+    {
+        if (_starting || _stopping || _engine.IsRunning) return;
+        _settings.Detection.EnabledRegions = new() { BodyRegion.Face };
+        _settings.Detection.WholeBodyEnabled = false;
+        _settings.Censoring.Style = CensorStyle.Solid;
+        _settings.Censoring.Color = "#000000";
+        _settings.Censoring.Opacity = 1;
+        LoadSettingsToUi();
+        SaveSettings(showStatus: false);
+        UpdatePreview();
+        HeroBody.Text = "Face selected · solid black. Start protection (Alt+S) to detect visible faces locally.";
+    }
+
     private void LoadSettingsToUi()
     {
         _uiReady = false;
@@ -165,6 +181,8 @@ public partial class MainWindow : Window
         {
             var c = _settings.Censoring;
             var d = _settings.Detection;
+            FaceConfidenceSlider.Value = d.FaceConfidence;
+            LocalFaceGuardCheck.IsChecked = d.LocalFaceUncertaintyCover;
             var p = _settings.Performance;
 
             foreach (var check in _regionChecks)
@@ -288,6 +306,8 @@ public partial class MainWindow : Window
             .Where(x => x.IsChecked == true)
             .Select(x => (BodyRegion)x.Tag)
             .ToHashSet();
+        d.FaceConfidence = FaceConfidenceSlider.Value;
+        d.LocalFaceUncertaintyCover = LocalFaceGuardCheck.IsChecked == true;
         d.Confidence = ConfidenceSlider.Value;
         d.NmsIou = NmsSlider.Value;
         d.PersonConfidence = PersonConfSlider.Value;
@@ -529,7 +549,7 @@ public partial class MainWindow : Window
         ReadSettingsFromUi();
         if (_settings.Detection.EnabledRegions.Count == 0 && !_settings.Detection.WholeBodyEnabled)
         {
-            MessageBox.Show(this, "Select at least one anatomical class, or enable whole-person mode.",
+            MessageBox.Show(this, "Select Face, an anatomical region, or whole-person mode.",
                 "Nothing to censor", MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
@@ -555,6 +575,10 @@ public partial class MainWindow : Window
             HeroEyebrow.Text = "PROTECTION ON";
             HeroTitle.Text = "Your displays are covered.";
             HeroBody.Text = "Captured frames are analysed locally; overlays are click-through and excluded from capture. Stop protection at any time.";
+            if (_settings.Detection.EnabledRegions.Contains(BodyRegion.Face))
+                HeroBody.Text += _settings.Detection.LocalFaceUncertaintyCover
+                    ? " Uncertain faces receive enlarged opaque local guards; capture or inference failure still hides the screen."
+                    : " Strict face uncertainty mode may hide the whole screen for a low-confidence candidate.";
             RefreshExportMonitors();
         }
         catch (OperationCanceledException)
@@ -571,7 +595,7 @@ public partial class MainWindow : Window
             StateText.Text = "Idle";
             HeroEyebrow.Text = "PROTECTION OFF";
             HeroTitle.Text = "Your screen is not being captured.";
-            HeroBody.Text = "Start protection to capture selected displays, run three ONNX models locally, and draw click-through censor overlays.";
+            HeroBody.Text = "Start protection to capture selected displays, run selected ONNX models locally, and draw click-through censor overlays.";
             MessageBox.Show(this, ex.Message, "Could not start protection",
                 MessageBoxButton.OK, MessageBoxImage.Warning);
         }
@@ -616,7 +640,7 @@ public partial class MainWindow : Window
             StateText.Text = "Idle";
             HeroEyebrow.Text = "PROTECTION OFF";
             HeroTitle.Text = "Your screen is not being captured.";
-            HeroBody.Text = "Start protection to capture selected displays, run three ONNX models locally, and draw click-through censor overlays.";
+            HeroBody.Text = "Start protection to capture selected displays, run selected ONNX models locally, and draw click-through censor overlays.";
             RefreshExportMonitors();
             UpdateStatus();
         }
@@ -629,6 +653,8 @@ public partial class MainWindow : Window
 
     private void SetStartButtons(bool enabled, string text)
     {
+        PageDetection.IsEnabled = !_starting && !_stopping && !_engine.IsRunning;
+        FaceOnlyButton.IsEnabled = PageDetection.IsEnabled;
         HeaderStartButton.IsEnabled = enabled;
         HeroStartButton.IsEnabled = enabled;
         HeaderStartButton.Content = text;
@@ -1052,6 +1078,11 @@ public partial class MainWindow : Window
 
     private void ApplyPack_Click(object sender, RoutedEventArgs e)
     {
+        if (_starting || _stopping || _engine.IsRunning)
+        {
+            MessageBox.Show(this, "Stop protection before applying a preset that may change detection targets.", "Stop protection first");
+            return;
+        }
         if (sender is not Button { Tag: string path }) return;
         var destination = Path.Combine(AppPaths.PacksDirectory,
             "applied-" + Path.GetFileNameWithoutExtension(path) + "-" + Guid.NewGuid().ToString("N")[..6]);
@@ -1318,6 +1349,11 @@ public partial class MainWindow : Window
 
     private void ResetSettings_Click(object sender, RoutedEventArgs e)
     {
+        if (_starting || _stopping || _engine.IsRunning)
+        {
+            MessageBox.Show(this, "Stop protection before resetting detection targets.", "Stop protection first");
+            return;
+        }
         if (MessageBox.Show(this, "Reset every setting to its default? Session history and exported files are not touched.",
                 "Reset settings", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
         _settingsStore.ResetToDefaults();

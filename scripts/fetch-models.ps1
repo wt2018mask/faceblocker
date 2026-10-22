@@ -44,6 +44,11 @@ function Get-VerifiedFile {
 }
 
 Get-VerifiedFile `
+    -Url "https://media.githubusercontent.com/media/opencv/opencv_zoo/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx" `
+    -Destination (Join-Path $models "face_detection_yunet_2023mar.onnx") `
+    -Sha256 "8F2383E4DD3CFBB4553EA8718107FC0423210DC964F9F4280604804ED2552FA4"
+
+Get-VerifiedFile `
     -Url "https://api.github.com/repos/notAI-tech/NudeNet/releases/assets/176831997" `
     -Destination (Join-Path $models "nudenet-320n.onnx") `
     -Sha256 "C15D8273ADAD2D0A92F014CC69AB2D6C311A06777A55545F2C4EB46F51911F0F" `

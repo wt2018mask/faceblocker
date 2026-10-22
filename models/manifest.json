@@ -41,6 +41,16 @@
       "source": "https://huggingface.co/onnx-community/mediapipe_selfie_segmentation/resolve/main/onnx/model.onnx",
       "input": "pixel_values [1,3,256,256] RGB float 0..1, direct bilinear resize",
       "output": "alphas [1,1,256,256] sigmoid probabilities"
+    },
+    {
+      "id": "yunet-2023mar",
+      "file": "face_detection_yunet_2023mar.onnx",
+      "bytes": 232589,
+      "sha256": "8F2383E4DD3CFBB4553EA8718107FC0423210DC964F9F4280604804ED2552FA4",
+      "license": "MIT",
+      "source": "https://media.githubusercontent.com/media/opencv/opencv_zoo/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx",
+      "input": "input [1,3,640,640] BGR float 0..255, centered black letterbox",
+      "output": "cls/obj/bbox/kps stride 8,16,32; score sqrt(cls*obj), exp box size; landmarks discarded"
     }
   ]
 }

@@ -2,8 +2,8 @@ namespace VeilDesk.Core.Detection;
 
 /// <summary>
 /// Regions that the bundled NudeNet 320n model genuinely predicts, plus the
-/// synthetic whole-person region produced by combining a person detector with
-/// a silhouette model. Labels follow NudeNet's class order exactly.
+/// whole-person and dedicated YuNet face targets. Values 0..17 preserve
+/// NudeNet's class order exactly; Face makes no gender or identity claim.
 /// </summary>
 public enum BodyRegion
 {
@@ -25,7 +25,8 @@ public enum BodyRegion
     AnusCovered = 15,
     FemaleBreastCovered = 16,
     ButtocksCovered = 17,
-    Person = 100
+    Person = 100,
+    Face = 101
 }
 
 public static class BodyRegionExtensions
@@ -73,6 +74,7 @@ public static class BodyRegionExtensions
         BodyRegion.FemaleBreastCovered => "Female breasts (covered)",
         BodyRegion.ButtocksCovered => "Buttocks (covered)",
         BodyRegion.Person => "Whole person",
+        BodyRegion.Face => "Face (YuNet · all people)",
         _ => region.ToString()
     };
 
@@ -102,5 +104,5 @@ public static class BodyRegionExtensions
         BodyRegion.FaceMale;
 
     public static IEnumerable<BodyRegion> AllDetectableRegions()
-        => Enumerable.Range(0, 18).Select(i => (BodyRegion)i);
+        => new[] { BodyRegion.Face }.Concat(Enumerable.Range(0, 18).Select(i => (BodyRegion)i));
 }

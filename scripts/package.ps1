@@ -86,6 +86,7 @@ foreach ($entry in $manifest.models) {
 }
 Copy-Item -LiteralPath (Join-Path $models "manifest.json") -Destination $targetModels -Force
 Copy-Item -LiteralPath (Join-Path $models "README.md") -Destination $targetModels -Force
+Copy-Item -LiteralPath (Join-Path $models "YUNET-LICENSE.txt") -Destination $targetModels -Force
 
 $targetPacks = Join-Path $publishDir "builtin-packs"
 New-Item -ItemType Directory -Force -Path $targetPacks | Out-Null

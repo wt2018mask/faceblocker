@@ -57,3 +57,7 @@ Public product pages, patch notes and videos were consulted for feature
 research only. No proprietary binary was decompiled, no proprietary asset was
 copied, and no licence bypass was implemented. See
 `docs/REFERENCE_EVIDENCE.md`.
+
+## YuNet face detector
+
+OpenCV Zoo `face_detection_yunet_2023mar.onnx` (232,589 bytes). MIT, copyright (c) 2020 Shiqi Yu. Full required notice: `models/YUNET-LICENSE.txt`. Authoritative source and SHA-256: `models/manifest.json`. No biometric identity inference or landmark persistence.

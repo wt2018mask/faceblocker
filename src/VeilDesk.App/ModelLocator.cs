@@ -1,4 +1,6 @@
 using System.IO;
+using VeilDesk.Core.Settings;
+using VeilDesk.Inference;
 
 namespace VeilDesk.App;
 
@@ -9,7 +11,7 @@ namespace VeilDesk.App;
 /// </summary>
 public static class ModelLocator
 {
-    public static string? Find()
+    public static string? Find(AppSettings? settings = null)
     {
         var candidates = new List<string>();
         candidates.Add(Path.Combine(AppContext.BaseDirectory, "models"));
@@ -25,7 +27,9 @@ public static class ModelLocator
         foreach (var candidate in candidates)
         {
             if (File.Exists(Path.Combine(candidate, "manifest.json")) &&
-                File.Exists(Path.Combine(candidate, "nudenet-320n.onnx")))
+                (File.Exists(Path.Combine(candidate, "nudenet-320n.onnx")) ||
+                 File.Exists(Path.Combine(candidate, "face_detection_yunet_2023mar.onnx"))) &&
+                (settings is null || VisionPipelineOptions.ForSettings(candidate, settings).Validate() is null))
                 return candidate;
         }
         return null;

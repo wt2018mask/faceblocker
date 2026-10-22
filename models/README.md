@@ -1,3 +1,7 @@
+## Dedicated Face detector (2026-10-22)
+
+YuNet 2023mar, fixed640 BGR0..255, MIT; full notice `YUNET-LICENSE.txt`. Authoritative URL/hash/shape are in `manifest.json`; fetch using `scripts/fetch-models.ps1`. The app verifies the face weights hash at load. Face-only does not require or execute the anatomical/person/segmentation models. No OpenCV runtime is added to the app.
+
 # Bundled model provenance
 
 Model weights are **not** committed to Git (they are large binaries). They are

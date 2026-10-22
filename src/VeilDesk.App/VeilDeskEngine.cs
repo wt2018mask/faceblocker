@@ -147,18 +147,12 @@ public sealed class VeilDeskEngine : IAsyncDisposable, IRecordingSource
         if (selected.Count == 0)
             throw new InvalidOperationException("No display is selected in Settings → Displays.");
 
-        var modelDirectory = ModelLocator.Find()
+        var modelDirectory = ModelLocator.Find(snapshot)
             ?? throw new InvalidOperationException(
                 "Model files were not found. Run scripts/fetch-models.ps1, then restart. Searched: " +
                 ModelLocator.DescribeSearched());
 
-        var options = new VisionPipelineOptions
-        {
-            ModelDirectory = modelDirectory,
-            UseDirectML = snapshot.Performance.UseDirectML,
-            UseHighResolutionPersonModel = snapshot.Performance.Preset == PerformancePreset.High,
-            InferenceThreads = snapshot.Performance.InferenceThreads
-        };
+        var options = VisionPipelineOptions.ForSettings(modelDirectory, snapshot);
 
         try
         {
@@ -420,7 +414,11 @@ public sealed class VeilDeskEngine : IAsyncDisposable, IRecordingSource
         var thumb = runner.Scene.ComputeThumbprint(frame.Span, frame.Width, frame.Height, frame.Stride);
         var delta = runner.Scene.Update(thumb);
 
-        var due = !c.Performance.AdaptiveScanning ||
+        // A small entering face may barely change a whole-screen thumbnail.
+        // Face protection examines every scheduled fresh frame instead of
+        // waiting for the 750ms static-scene refresh.
+        var due = c.Detection.EnabledRegions.Contains(VeilDesk.Core.Detection.BodyRegion.Face) ||
+                  !c.Performance.AdaptiveScanning ||
                   delta >= c.Performance.StaticSceneThreshold ||
                   now - Interlocked.Read(ref runner.LastAnalysisMs) >= 750 ||
                   Interlocked.Read(ref runner.Analyses) == 0;
@@ -444,8 +442,18 @@ public sealed class VeilDeskEngine : IAsyncDisposable, IRecordingSource
         }
 
         var result = runner.Pipeline.Analyze(frame, c, now);
+        if (Environment.GetEnvironmentVariable("VEILDESK_ACCEPTANCE_DIAGNOSTICS") == "1")
+            AppLog.Write("acceptance-analysis", System.Text.Json.JsonSerializer.Serialize(new
+            {
+                monitor = runner.Monitor.Id, frame = frame.FrameNumber,
+                frameAgeMs = Environment.TickCount64 - frame.TimestampMs,
+                result.PreprocessMs, result.FaceMs, result.TotalMs, result.Error,
+                faces = result.FaceDetections.Select(f => new { f.Box, f.Confidence }),
+                masks = result.Regions.Select(r => new { r.Source, r.Kind, r.Box }),
+                state = runner.Pipeline.ProtectionState.ToString()
+            }));
         if (snapshot is not null) Volatile.Write(ref runner.Snapshot, snapshot);
-        var detectionEvents = result.NudeDetections.Count + result.PersonDetections.Count;
+        var detectionEvents = result.NudeDetections.Count + result.PersonDetections.Count + result.FaceDetections.Count;
         runner.LastTracks = result.Tracks.Count;
         return new FrameOutcome(true, result.TotalMs, result.Tracks.Count, detectionEvents,
             result.Error, delta);

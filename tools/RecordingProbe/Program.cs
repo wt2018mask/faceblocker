@@ -33,6 +33,7 @@ internal static class Program
             try
             {
                 VerifyMaskCacheBounded();
+                VerifyUncertainFaceCover();
                 await BlockedStopRegression(dispatcher);
                 var pixels = Enumerable.Repeat((byte)200, 320 * 240 * 4).ToArray();
                 for (var i = 3; i < pixels.Length; i += 4) pixels[i] = 255;
@@ -42,6 +43,8 @@ internal static class Program
                     new PixelRect(80, 60, 100, 90), .95, null, 0, 0);
                 await VerifyExports(bitmap, new[] { region }, dispatcher, "synthetic");
                 if (args.Length == 2) await VerifyActualModels(args[0], args[1], dispatcher);
+                if (args.Length == 3 && args[2] == "--face")
+                    await VerifyActualModels(args[0], args[1], dispatcher, face: true);
                 Console.WriteLine("PASS headless recorder/export probe output=" + OutputRoot);
                 exit = 0;
             }
@@ -53,6 +56,32 @@ internal static class Program
     }
 
     private static void Check(bool ok, string message) { if (!ok) throw new InvalidOperationException(message); }
+
+    private static void VerifyUncertainFaceCover()
+    {
+        var monitor = new MonitorDescriptor("fixture", "fixture", "fixture", 0, 0, 320, 240, 1, false);
+        var sourceBytes = Enumerable.Repeat((byte)200, 320 * 240 * 4).ToArray();
+        for (var i = 3; i < sourceBytes.Length; i += 4) sourceBytes[i] = 255;
+        var source = BitmapSource.Create(320, 240, 96, 96, PixelFormats.Bgra32, null, sourceBytes, 1280);
+        var s = Settings("uncertain-face");
+        s.Censoring.Style = CensorStyle.Outline;
+        s.Censoring.Opacity = 0.1;
+        s.Censoring.CornerRadius = 64;
+        var region = new CensorRegion(1, BodyRegion.Face, CensorRegionKind.UncertainFace,
+            new PixelRect(80, 60, 100, 90), .354, null, 0, 0);
+        var output = ExportService.Composite(source, monitor, new[] { region }, s);
+        var bytes = new byte[320 * 240 * 4];
+        output.CopyPixels(bytes, 1280, 0);
+        for (var y = 60; y < 150; y++)
+        for (var x = 80; x < 180; x++)
+        {
+            var i = (y * 320 + x) * 4;
+            Check(bytes[i] == 0 && bytes[i + 1] == 0 && bytes[i + 2] == 0 && bytes[i + 3] == 255,
+                "uncertain face cover exposed a pixel");
+        }
+        Check(bytes[0] == 200, "local face guard covered the whole output");
+        Console.WriteLine("PASS uncertain face: every local cover pixel opaque black under Outline/10%/rounded settings; outside unchanged");
+    }
 
     private static void VerifyMaskCacheBounded()
     {
@@ -177,7 +206,7 @@ internal static class Program
         return frames;
     }
 
-    private static async Task VerifyActualModels(string models, string image, Dispatcher dispatcher)
+    private static async Task VerifyActualModels(string models, string image, Dispatcher dispatcher, bool face = false)
     {
         var decoded = BitmapFrame.Create(new Uri(Path.GetFullPath(image)), BitmapCreateOptions.None, BitmapCacheOption.OnLoad);
         var bitmap = new FormatConvertedBitmap(decoded, PixelFormats.Bgra32, null, 0);
@@ -187,15 +216,18 @@ internal static class Program
         var settings = Settings("actual-model");
         settings.Censoring.FailClosed = false;
         settings.Detection.Confidence = .2;
-        using var pipeline = new VisionPipeline(new VisionPipelineOptions { ModelDirectory = Path.GetFullPath(models), UseDirectML = false, InferenceThreads = 2 });
+        if (face) settings.Detection.EnabledRegions = new() { BodyRegion.Face };
+        settings.Performance.UseDirectML = false;
+        settings.Performance.InferenceThreads = 2;
+        using var pipeline = new VisionPipeline(VisionPipelineOptions.ForSettings(Path.GetFullPath(models), settings));
         var now = Environment.TickCount64;
         pipeline.StartProtection(settings, now);
         pipeline.ReportFrame(capture.Frame.TimestampMs);
         var result = pipeline.Analyze(capture.Frame, settings, now);
         var regions = result.Regions.Where(r => r.Kind == CensorRegionKind.Detection).ToList();
-        Check(result.Error is null && regions.Count > 0, "actual model yielded no selected anatomical masks");
-        Console.WriteLine($"actual model anatomical detections={result.NudeDetections.Count} mask regions={regions.Count}");
-        await VerifyExports(bitmap, regions, dispatcher, "actual-model");
+        Check(result.Error is null && regions.Count > 0, "actual model yielded no selected masks");
+        Console.WriteLine($"actual model anatomical={result.NudeDetections.Count} faces={result.FaceDetections.Count} mask regions={regions.Count}");
+        await VerifyExports(bitmap, regions, dispatcher, face ? "actual-face" : "actual-model");
     }
 
     private sealed class StaticSource : IRecordingSource, IDisposable

@@ -9,7 +9,8 @@ public enum CensorRegionKind
 {
     Detection,
     WholePerson,
-    FailClosed
+    FailClosed,
+    UncertainFace
 }
 
 public sealed record CensorRegion(
@@ -85,17 +86,24 @@ public static class CensorComposer
             }
 
             if (!detection.EnabledRegions.Contains(track.Region)) continue;
-            if (!(confidenceGate?.Allows(track.Id, track.Confidence, detection.Confidence, releaseRatio)
-                ?? track.Confidence >= detection.Confidence)) continue;
+            var threshold = track.Region == BodyRegion.Face ? detection.FaceConfidence : detection.Confidence;
+            var trusted = confidenceGate?.Allows(track.Id, track.Confidence, threshold, releaseRatio)
+                ?? track.Confidence >= threshold;
+            // A low-confidence face candidate still receives a real opaque
+            // mask. This fulfils CoverageGuard instead of bypassing it.
+            var uncertainFace = track.Region == BodyRegion.Face && !trusted &&
+                detection.LocalFaceUncertaintyCover && track.Confidence >= Math.Min(0.35, threshold);
+            if (!trusted && !uncertainFace) continue;
 
             var box = track.PredictedBox(nowMs, censoring.PredictionHorizonMs, censoring.MotionPadding, monitorBounds)
                 .Expand(censoring.MaskExpansion).Clip(monitorBounds);
+            if (uncertainFace) box = box.ExpandFraction(0.5).Clip(monitorBounds);
             if (box.IsEmpty || box.Area < 16) continue;
 
             result.Add(new CensorRegion(
                 track.Id,
                 track.Region,
-                CensorRegionKind.Detection,
+                uncertainFace ? CensorRegionKind.UncertainFace : CensorRegionKind.Detection,
                 box,
                 track.Confidence,
                 track.Mask,

@@ -35,6 +35,8 @@ public sealed class DetectionSettings
         Core.Detection.BodyRegion.AnusExposed
     };
 
+    public double FaceConfidence { get; set; } = 0.6;
+    public bool LocalFaceUncertaintyCover { get; set; } = true;
     public double Confidence { get; set; } = 0.35;
     public double NmsIou { get; set; } = 0.45;
 
@@ -176,6 +178,7 @@ public static class SettingsValidator
     public static void ValidateAndClamp(AppSettings settings)
     {
         var d = settings.Detection;
+        d.FaceConfidence = Math.Clamp(d.FaceConfidence, 0.05, 0.95);
         d.Confidence = Math.Clamp(d.Confidence, 0.05, 0.95);
         d.NmsIou = Math.Clamp(d.NmsIou, 0.1, 0.95);
         d.PersonConfidence = Math.Clamp(d.PersonConfidence, 0.05, 0.95);
