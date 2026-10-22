@@ -1,4 +1,25 @@
-# Test results
+# 최신 실행 결과 — 2026-10-22 복구 세션
+
+아래 최신 절만 이번 세션의 실행 증거다. 세부 절차는 RECOVERY-20261022.md 참조.
+
+| 실행 | 결과 |
+|---|---|
+| 최초 격리 환경 dotnet test | FAIL: testhost IPC 연결이 90초 후 중단. 테스트 assertion 실패와 구분한다. |
+| 로컬 기존 테스트 재실행 | PASS 26/26 |
+| `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Test-Headless.ps1` | PASS: 39/39, Release 0 오류/0 경고(`RunAnalyzers=false`), 보호 프로브, WPF Image 초기화 |
+| `dotnet run --project tools/ProtectionProbe/ProtectionProbe.csproj -c Release --no-build -- models artifacts/live-test/david.jpg` | PASS: 실제 CPU ONNX 검출→추적→해부학적 마스크→픽셀 합성. 사람 1, 해부학적 검출 9, 검열 영역 2, 변경 픽셀 128,082 |
+| 추론 정지 중 보호 판정 및 Stop | PASS: 생산 VisionPipeline에 제어 가능한 모델 주입. 판정 4.54 ms, 전체 보호 영역 존재, Stop 후 영역 0, 늦은 완료 후에도 영역 0 |
+| 전체 보호 렌더러 | PASS: 음수 모니터 원점, 150% DPI 기술값, CornerRadius=100, Opacity=0.1에서 모서리 불투명 픽셀 확인. 실제 창 검증과 구분 |
+| 옵션 없는 로컬 legacy viewer/run-live 호출 | PASS: 명시적 opt-in 요구 오류로 종료, 창 생성 경로에 진입하지 않음 |
+| 실제 Ctrl+C, 전역 비상키, 엔진 Start/Stop 창 수명 | NOT RUN: 사용자 참여 대화형 검증 필요 |
+| 현재 데스크톱 검출→실제 오버레이·녹화·복수 모니터 | NOT RUN |
+
+새 회귀 13개는 복구 dwell, 중복 성공, 지연 추론, 캡처 누락, 결과 순서, 실패 교대,
+캡처 복구, 100회 상태 Start/Stop, confidence hysteresis, 불변 스냅샷,
+트랙 누락/회복, 두 합성 디스플레이 좌표 경우를 검사한다. 상태 Start/Stop 테스트는 실제 창 테스트가 아니다.
+화면 캡처나 테스트 미디어를 외부로 전송하지 않았다.
+
+# 이전 에이전트의 역사적 Test results
 
 **Date:** 2026-10-22 (Asia/Seoul)
 **Machine:** Intel i7-1065G7, 16 GB RAM, Iris Plus, Windows 11 build 26200,

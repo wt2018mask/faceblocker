@@ -1,4 +1,17 @@
-# Known limitations
+# 최신 검증 한계 — 2026-10-22
+
+- 수정 후 실제 화면의 깜박임·물리 마스크 정렬·전역 비상 중지·초기화 중 Stop은 NOT RUN이다.
+- 정적 ONNX/합성과 headless 추론 정지 회귀가 통과해도 라이브 노출이 없다는 증거는 아니다.
+- 캡처가 새 프레임을 내지 않으면 보수적으로 전체 보호한다. 정지한 화면에서 WGC가 갱신을 멈추는 경우도 보호 상태로 남을 수 있다.
+- 네이티브 추론이 영구 정지하면 Stop은 창을 먼저 제거하나 자원 정리/앱 닫기 완료는 지연될 수 있다. 프로세스 격리 watchdog은 없다.
+- UI 스레드 정지, 렌더러/드라이버 장애를 별도 프로세스가 감시하지 않는다. 보호 제외 API 실패는 시작을 거부한다.
+- 실제 해상도/디스플레이 구성 변경의 자동 재열거·재시작은 미완성이다. 보호를 멈추고 표시 장치를 새로고침한 뒤 다시 시작해야 한다.
+- 물리 복수 모니터, 실제 Ctrl+C 정리, 실제 앱 녹화와 검출 포함 데스크톱 내보내기, clean VM 설치는 NOT RUN이다.
+- Herdr 자체 장애와 과거 `$image` 객체의 실제 타입은 미확정이다. 테스트 스크립트의 직접 뷰어 실행·터미널 반복 최소화는 확인했다.
+- Windows 캡처→추론→합성기 경로의 후행 처리 때문에 새 콘텐츠의 선행 차단이나 0 노출은 보장하지 않는다.
+- 기존/신규 패키지는 이 제한을 가진 엔지니어링 미리보기이며 정식 배포 완료가 아니다.
+
+# Historical known limitations
 
 VeilDesk is a local privacy aid, not a security boundary or a guarantee that no
 sensitive content can ever appear. The following limits are known and are not

@@ -185,7 +185,11 @@ public sealed class ProtectionSupervisor
     /// <summary>A new frame was captured and handed to the analysis loop.</summary>
     public void ReportFrame(long nowMs)
     {
-        lock (_gate) _lastFrameMs = nowMs;
+        lock (_gate)
+        {
+            if (_state == ProtectionState.Stopped || nowMs <= _lastFrameMs) return;
+            _lastFrameMs = nowMs;
+        }
     }
 
     /// <summary>
@@ -202,6 +206,9 @@ public sealed class ProtectionSupervisor
     {
         lock (_gate)
         {
+            if (_state == ProtectionState.Stopped || nowMs <= _lastSuccessMs || nowMs <= _lastFailureMs) return;
+            if (_lastSuccessMs >= 0 && nowMs - _lastSuccessMs > _failClosedAfterMs)
+                _consecutiveSuccesses = 0;
             _lastSuccessMs = nowMs;
             _consecutiveSuccesses++;
             _consecutiveFailures = 0;
@@ -214,6 +221,7 @@ public sealed class ProtectionSupervisor
     {
         lock (_gate)
         {
+            if (_state == ProtectionState.Stopped) return;
             _lastFailureMs = nowMs;
             _consecutiveFailures++;
             _consecutiveSuccesses = 0;
@@ -258,6 +266,7 @@ public sealed class ProtectionSupervisor
             previous = _state;
             var neverTrusted = _lastSuccessMs < 0;
             var evidenceStale = !neverTrusted && (nowMs - _lastSuccessMs) > _failClosedAfterMs;
+            var frameStale = nowMs - _lastFrameMs > _failClosedAfterMs;
 
             if (previous == ProtectionState.Protecting)
             {
@@ -271,10 +280,10 @@ public sealed class ProtectionSupervisor
                     current = ProtectionState.FailClosed;
                     reason = $"no successful analysis for {nowMs - _lastSuccessMs} ms";
                 }
-                else if (_captureFailed)
+                else if (_captureFailed || frameStale)
                 {
                     current = ProtectionState.FailClosed;
-                    reason = "capture failed: " + (_captureError ?? "unknown error");
+                    reason = "capture unavailable or stale";
                 }
                 else
                 {
@@ -284,7 +293,7 @@ public sealed class ProtectionSupervisor
             }
             else
             {
-                var healthy = !neverTrusted && !evidenceStale && !_captureFailed;
+                var healthy = !neverTrusted && !evidenceStale && !_captureFailed && !frameStale;
                 var dwellElapsed = _failClosedSinceMs >= 0 && (nowMs - _failClosedSinceMs) >= _minPausedMs;
                 var enoughPasses = _consecutiveSuccesses >= _recoveryPasses;
                 if (healthy && dwellElapsed && enoughPasses)
@@ -308,7 +317,11 @@ public sealed class ProtectionSupervisor
             if (current != previous)
             {
                 _state = current;
-                if (current == ProtectionState.FailClosed) _failClosedSinceMs = nowMs;
+                if (current == ProtectionState.FailClosed)
+                {
+                    _failClosedSinceMs = nowMs;
+                    _consecutiveSuccesses = 0;
+                }
                 _reason = reason;
             }
             else if (current == ProtectionState.Protecting && _reason != reason)

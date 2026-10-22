@@ -30,7 +30,16 @@ public sealed class VisionPipelineOptions
 /// Owns the three ONNX Runtime sessions and reports which execution provider
 /// actually initialised. No network access, telemetry, or remote inference.
 /// </summary>
-public sealed class VisionModels : IDisposable
+public interface IVisionModelRunner : IDisposable
+{
+    string Provider { get; }
+    string? DirectMLError { get; }
+    float[] RunNudeNet(float[] input, int size);
+    float[] RunPerson(float[] input, int size);
+    float[] RunSegmentation(float[] input);
+}
+
+public sealed class VisionModels : IVisionModelRunner
 {
     private readonly InferenceSession _nude;
     private readonly InferenceSession _person;

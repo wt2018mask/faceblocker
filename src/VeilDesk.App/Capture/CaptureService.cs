@@ -118,6 +118,20 @@ public sealed class CaptureService : IAsyncDisposable
         return session?.Mailbox.TakeLatest();
     }
 
+    /// <summary>
+    /// Reads the last capture error for a display without dispatching to the
+    /// capture thread. Used by the protection supervisor so a broken capture
+    /// session is noticed immediately instead of only when the status page is
+    /// refreshed.
+    /// </summary>
+    public bool TryGetError(string monitorId, out string? error)
+    {
+        MonitorCaptureSession? session;
+        lock (_lifecycle) session = FindSession(monitorId);
+        error = session?.Error;
+        return !string.IsNullOrEmpty(error);
+    }
+
     private MonitorCaptureSession? FindSession(string monitorId)
         => _sessions.FirstOrDefault(s =>
             string.Equals(s.Monitor.Id, monitorId, StringComparison.OrdinalIgnoreCase));
@@ -353,10 +367,13 @@ public sealed class CaptureService : IAsyncDisposable
                     }
 
                     var capturedAt = DateTime.UtcNow;
-                    var timestampMs = (long)Stopwatch.GetElapsedTime(_startTicks, now).TotalMilliseconds;
+                    var timestampMs = Environment.TickCount64;
+                    // The frame content is monitor-local, so the bounds that
+                    // travel with it must be monitor-local as well.
                     local = VideoFrame.Rent(desc.Width, desc.Height, desc.Width * 4,
                         Interlocked.Increment(ref _frameNumber), timestampMs, Monitor.Id,
-                        Monitor.Bounds, capturedAt);
+                        new VeilDesk.Core.Geometry.PixelRect(0, 0, desc.Width, desc.Height),
+                        capturedAt);
                     _d3d.CopyTo(local.Pixels, desc.Width * 4, desc.Width, desc.Height,
                         frame.Surface, _staging);
                 }

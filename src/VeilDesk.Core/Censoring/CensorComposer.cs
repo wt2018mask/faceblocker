@@ -37,7 +37,8 @@ public static class CensorComposer
         AppSettings settings,
         PixelRect monitorBounds,
         long nowMs,
-        bool failClosedActive)
+        bool failClosedActive,
+        ConfidenceGate? confidenceGate = null)
     {
         var result = new List<CensorRegion>(16);
         var censoring = settings.Censoring;
@@ -50,8 +51,6 @@ public static class CensorComposer
         // flickering it on and off. The track confidence itself is already
         // smoothed by the tracker.
         var releaseRatio = Math.Clamp(censoring.ConfidenceReleaseRatio, 0.1, 1.0);
-        var bodyRelease = detection.Confidence * releaseRatio;
-        var personRelease = detection.WholeBodyConfidence * releaseRatio;
 
         foreach (var track in tracks)
         {
@@ -61,7 +60,8 @@ public static class CensorComposer
             if (track.IsPerson)
             {
                 if (!detection.WholeBodyEnabled) continue;
-                if (track.Confidence < personRelease) continue;
+                if (!(confidenceGate?.Allows(track.Id, track.Confidence, detection.WholeBodyConfidence, releaseRatio)
+                    ?? track.Confidence >= detection.WholeBodyConfidence)) continue;
                 if (detection.WholeBodyNudeOnly && !track.HasExposedEvidence) continue;
                 if (track.Gender == PersonGender.Female && !detection.WholeBodyFemale) continue;
                 if (track.Gender == PersonGender.Male && !detection.WholeBodyMale) continue;
@@ -69,7 +69,7 @@ public static class CensorComposer
                 if (track.Gender == PersonGender.Unknown && !detection.WholeBodyFemale && !detection.WholeBodyMale) continue;
 
                 var personBox = track.PredictedBox(nowMs, censoring.PredictionHorizonMs, censoring.MotionPadding, monitorBounds)
-                    .Expand(censoring.OutlineMargin);
+                    .Expand(censoring.OutlineMargin).Clip(monitorBounds);
                 if (personBox.IsEmpty) continue;
 
                 result.Add(new CensorRegion(
@@ -85,10 +85,11 @@ public static class CensorComposer
             }
 
             if (!detection.EnabledRegions.Contains(track.Region)) continue;
-            if (track.Confidence < bodyRelease) continue;
+            if (!(confidenceGate?.Allows(track.Id, track.Confidence, detection.Confidence, releaseRatio)
+                ?? track.Confidence >= detection.Confidence)) continue;
 
             var box = track.PredictedBox(nowMs, censoring.PredictionHorizonMs, censoring.MotionPadding, monitorBounds)
-                .Expand(censoring.MaskExpansion);
+                .Expand(censoring.MaskExpansion).Clip(monitorBounds);
             if (box.IsEmpty || box.Area < 16) continue;
 
             result.Add(new CensorRegion(

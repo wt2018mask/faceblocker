@@ -67,6 +67,7 @@ try
 
     AnalysisResult? last = null;
     var clock = Stopwatch.StartNew();
+    pipeline.StartProtection(settings, clock.ElapsedMilliseconds);
     for (var i = 0; i < iterations; i++)
     {
         using var frame = VideoFrame.Rent(width, height, stride, i + 1, clock.ElapsedMilliseconds,

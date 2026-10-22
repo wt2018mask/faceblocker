@@ -223,6 +223,11 @@ internal sealed class CensorVisual : Grid
     private readonly BlurEffect _blur = new() { Radius = 18, KernelType = KernelType.Gaussian };
     private readonly SolidColorBrush _solid = new();
 
+    private ImageSource? _cachedCrop;
+    private BitmapSource? _cachedCropSource;
+    private Int32Rect _cachedCropRect;
+    private int _cachedCropBlock;
+
     public CensorVisual()
     {
         IsHitTestVisible = false;
@@ -253,7 +258,11 @@ internal sealed class CensorVisual : Grid
         Dictionary<byte[], BitmapSource> maskCache)
     {
         var c = settings.Censoring;
-        var box = region.Box.Clip(monitor.LocalBounds);
+        var isFailClosed = region.Kind == CensorRegionKind.FailClosed;
+        // The safety cover always spans the whole output. Clipping it against
+        // the region box could produce an empty rectangle on a secondary
+        // display and leave that screen completely uncensored.
+        var box = isFailClosed ? monitor.LocalBounds : region.Box.Clip(monitor.LocalBounds);
         if (box.IsEmpty)
         {
             Visibility = Visibility.Collapsed;
@@ -269,7 +278,7 @@ internal sealed class CensorVisual : Grid
         Canvas.SetLeft(this, left);
         Canvas.SetTop(this, top);
 
-        var radius = Math.Min(Math.Min(width, height) / 2, c.CornerRadius);
+        var radius = isFailClosed ? 0 : Math.Min(Math.Min(width, height) / 2, c.CornerRadius);
         Clip = new RectangleGeometry(new Rect(0, 0, width, height), radius, radius);
         _fill.CornerRadius = new CornerRadius(radius);
         _outline.CornerRadius = new CornerRadius(radius);
@@ -278,9 +287,9 @@ internal sealed class CensorVisual : Grid
         _image.Width = _tint.Width = width;
         _image.Height = _tint.Height = height;
 
-        var style = region.Kind == CensorRegionKind.FailClosed ? CensorStyle.Solid : c.Style;
-        var color = ParseColor(region.Kind == CensorRegionKind.FailClosed ? "#03040A" : c.Color);
-        var opacity = region.Kind == CensorRegionKind.FailClosed ? 1.0 : Math.Clamp(c.Opacity, 0.1, 1.0);
+        var style = isFailClosed ? CensorStyle.Solid : c.Style;
+        var color = ParseColor(isFailClosed ? "#03040A" : c.Color);
+        var opacity = isFailClosed ? 1.0 : Math.Clamp(c.Opacity, 0.1, 1.0);
         var showLabel = settings.Censoring.ShowSubjectLabels && region.TrackId is not null;
         _solid.Color = color;
 
@@ -422,9 +431,9 @@ internal sealed class CensorVisual : Grid
             _outline.BorderBrush = new SolidColorBrush(Color.FromArgb(210, 0, 220, 255));
         }
 
-        if (region.Kind == CensorRegionKind.FailClosed)
+        if (isFailClosed)
         {
-            _label.Text = "VEILDESK · PROTECTION PAUSED\nDetection is not confident. Screen hidden.";
+            _label.Text = "VEILDESK · PROTECTION PAUSED\nWaiting for fresh, stable analysis. Screen hidden.\nCtrl+Shift+F12: stop protection";
             _label.Foreground = BrushFromHex("#E8ECF5");
             _label.FontSize = 20;
             _label.Visibility = Visibility.Visible;
@@ -450,19 +459,42 @@ internal sealed class CensorVisual : Grid
         y = Math.Clamp(y, 0, Math.Max(0, snapshot.PixelHeight - 1));
         w = Math.Clamp(w, 1, snapshot.PixelWidth - x);
         h = Math.Clamp(h, 1, snapshot.PixelHeight - y);
-        var crop = new CroppedBitmap(snapshot, new Int32Rect(x, y, w, h));
+        var rect = new Int32Rect(x, y, w, h);
+
+        // The crop is rebuilt on every overlay refresh. Allocating a new
+        // bitmap each time keeps the UI thread busy and can starve the
+        // dispatcher during a protection failure, so an unchanged crop is
+        // reused.
+        if (_cachedCrop is not null &&
+            ReferenceEquals(_cachedCropSource, snapshot) &&
+            _cachedCropRect == rect &&
+            _cachedCropBlock == (pixelBlock ?? 0))
+        {
+            _image.Source = _cachedCrop;
+            _image.Visibility = Visibility.Visible;
+            return;
+        }
+
+        var crop = new CroppedBitmap(snapshot, rect);
         crop.Freeze();
 
+        ImageSource result;
         if (pixelBlock is { } block && block > 1)
         {
             var down = new TransformedBitmap(crop, new ScaleTransform(1.0 / block, 1.0 / block));
             down.Freeze();
-            _image.Source = down;
+            result = down;
         }
         else
         {
-            _image.Source = crop;
+            result = crop;
         }
+
+        _cachedCrop = result;
+        _cachedCropSource = snapshot;
+        _cachedCropRect = rect;
+        _cachedCropBlock = pixelBlock ?? 0;
+        _image.Source = result;
         _image.Visibility = Visibility.Visible;
     }
 

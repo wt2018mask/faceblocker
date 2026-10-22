@@ -23,11 +23,13 @@ public static class AppLog
             lock (Gate)
             {
                 Directory.CreateDirectory(AppPaths.LogsDirectory);
+                if (File.Exists(Path) && new FileInfo(Path).Length >= 1024 * 1024)
+                    File.Move(Path, Path + ".previous", overwrite: true);
                 var line = new StringBuilder()
                     .Append(DateTime.Now.ToString("O"))
                     .Append(" [").Append(eventName).Append(']');
                 if (!string.IsNullOrWhiteSpace(detail))
-                    line.Append(' ').Append(detail);
+                    line.Append(' ').Append(detail.Replace('\r', ' ').Replace('\n', ' '));
                 File.AppendAllText(Path, line.AppendLine().ToString());
             }
         }

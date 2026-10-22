@@ -1,4 +1,20 @@
-# Handoff and resume guide
+# 최신 이어받기 — 보호 안정화
+
+먼저 [RECOVERY-20261022.md](RECOVERY-20261022.md)를 읽는다. 실제 화면 테스트는 사용자 허용 후만 실행한다.
+`scripts/Test-Headless.ps1`은 창 없이 39개 테스트, Release 빌드, 보호 프로브와 WPF 초기화를 검증한다.
+`tools/ProtectionProbe`에 `models <local-image>`를 전달하면 정적 실제 모델 검출과 합성을 검증한다.
+
+다음 최우선 작업은 사용자가 허용한 60초 라이브 검증이다. 기존 앱은 사용자 UI에서 닫고,
+`scripts/Invoke-InteractiveValidation.ps1 -Interactive -ImagePath <명시적 파일> -AppPath <새 앱> -DurationSeconds 60`
+를 사용한다. 보호는 사용자가 켠다. Ctrl+Shift+F12가 초기화/전체 보호 중에도 창을 제거하는지,
+이동 대상의 실제 마스크 위치, Stop/재시작, 종료 후 창 잔존 여부를 확인한다.
+전역키 등록 실패 시 시작을 거부한다. 고장 난 네이티브 ONNX 실행은 창 제거 뒤 자원 해제가 지연될 수 있다.
+기존 `artifacts/live-test/run-live.ps1` 원본의 Guardian/터미널 최소화 루프를 재사용하지 않는다.
+
+최신 빌드와 패키지는 엔지니어링 미리보기이며 production-ready 판정이 아니다.
+이하 절은 기존 역사 기록이다. 최신 게이트/명령과 충돌하면 이 절 및 RECOVERY 문서가 우선한다.
+
+# Historical handoff and resume guide
 
 **Snapshot:** 2026-10-22 (Asia/Seoul)
 **Project root:** `C:\Users\wt201\OneDrive\Desktop\blocker`
@@ -98,13 +114,13 @@ Do not rebuild while `VeilDesk.App.exe` is running: Windows locks the apphost an
 DLLs in `bin\`. Stop the process first:
 
 ```powershell
-Get-Process VeilDesk.App -ErrorAction SilentlyContinue | Stop-Process -Force
+# 기존 사용자 앱은 UI의 Stop 및 닫기로 종료한다. 모든 VeilDesk 프로세스를 일괄 강제 종료하지 않는다.
 ```
 
 Packaging (self-contained win-x64 folder + ZIP + checksums):
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\package.ps1
+powershell -ExecutionPolicy Bypass -File scripts\package.ps1 -Output artifacts\VeilDesk-new-build
 ```
 
 The script verifies every model hash and refuses to publish on a mismatch.

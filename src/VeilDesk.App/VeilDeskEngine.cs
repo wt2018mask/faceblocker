@@ -7,6 +7,7 @@ using VeilDesk.App.Overlay;
 using VeilDesk.Core.Censoring;
 using VeilDesk.Core.Diagnostics;
 using VeilDesk.Core.Geometry;
+using VeilDesk.Core.Safety;
 using VeilDesk.Core.Sessions;
 using VeilDesk.Core.Settings;
 using VeilDesk.Core.Tracking;
@@ -85,7 +86,8 @@ public sealed class VeilDeskEngine : IAsyncDisposable
     private readonly Dispatcher _ui;
     private readonly OverlayService _overlay;
     private readonly List<MonitorRunner> _runners = new();
-    private readonly object _stateGate = new();
+    private readonly SemaphoreSlim _lifecycle = new(1, 1);
+    private int _rendering;
 
     private VisionModels? _models;
     private AppSettings _settings = new();
@@ -97,6 +99,7 @@ public sealed class VeilDeskEngine : IAsyncDisposable
     private long _totalAnalyses;
     private long _totalDetections;
     private int _peakTracks;
+    private long _lastCaptureHealthMs;
     private string? _error;
     private string _provider = "-";
     private string? _dmlError;
@@ -116,7 +119,17 @@ public sealed class VeilDeskEngine : IAsyncDisposable
 
     public async Task StartAsync(AppSettings settings, IReadOnlyList<MonitorDescriptor> allMonitors)
     {
-        if (_running) await StopAsync();
+        await _lifecycle.WaitAsync();
+        try
+        {
+            if (_running) await StopCoreAsync();
+            await StartCoreAsync(settings, allMonitors);
+        }
+        finally { _lifecycle.Release(); }
+    }
+
+    private async Task StartCoreAsync(AppSettings settings, IReadOnlyList<MonitorDescriptor> allMonitors)
+    {
         _error = null;
         var snapshot = settings.Clone();
         SettingsValidator.ValidateAndClamp(snapshot);
@@ -144,8 +157,22 @@ public sealed class VeilDeskEngine : IAsyncDisposable
 
         try
         {
+            _cts = new CancellationTokenSource();
+            var token = _cts.Token;
+            await _ui.InvokeAsync(() =>
+            {
+                _overlay.Start(selected);
+                if (snapshot.Censoring.FailClosed)
+                    foreach (var monitor in selected)
+                        _overlay.RenderImmediate(monitor.Id,
+                            CensorComposer.Build(Array.Empty<TrackedDetection>(), snapshot,
+                                monitor.LocalBounds, Environment.TickCount64, true), snapshot);
+            });
+            if (!_overlay.AllExcludedFromCapture)
+                throw new InvalidOperationException("Overlay capture exclusion failed; protection cannot start safely.");
             _provider = "loading models";
             _models = await Task.Run(() => VisionModels.Load(options));
+            token.ThrowIfCancellationRequested();
             _provider = _models.Provider;
             _dmlError = _models.DirectMLError;
 
@@ -153,16 +180,17 @@ public sealed class VeilDeskEngine : IAsyncDisposable
             await _capture.StartAsync(selected,
                 new CaptureOptions(captureFps, snapshot.Capture.CaptureCursor));
 
-            await _ui.InvokeAsync(() => _overlay.Start(selected));
+            token.ThrowIfCancellationRequested();
 
             _runners.Clear();
             foreach (var monitor in selected)
             {
                 var runner = new MonitorRunner(monitor, new VisionPipeline(options, _models));
+                runner.Pipeline.ProtectionStateChanged += OnProtectionStateChanged;
+                runner.Pipeline.StartProtection(snapshot, Environment.TickCount64);
                 if (snapshot.Censoring.FailClosed)
                 {
-                    // Cover the display immediately; the first inference pass
-                    // clears fail-closed as soon as analysis succeeds.
+                    // Keep the cover until stable recovery evidence exists.
                     var guard = CensorComposer.Build(Array.Empty<TrackedDetection>(), snapshot,
                         monitor.LocalBounds, Environment.TickCount64, true);
                     _overlay.Render(monitor.Id, guard, snapshot, null);
@@ -170,14 +198,13 @@ public sealed class VeilDeskEngine : IAsyncDisposable
                 _runners.Add(runner);
             }
 
-            _cts = new CancellationTokenSource();
             _startedAt = DateTimeOffset.Now;
             _running = true;
             _totalAnalyses = 0;
             _totalDetections = 0;
             _peakTracks = 0;
 
-            _analysisTasks = _runners.Select(r => Task.Run(() => AnalysisLoopAsync(r, _cts.Token))).ToArray();
+            _analysisTasks = _runners.Select(r => Task.Run(() => AnalysisLoopAsync(r, token))).ToArray();
             StartOverlayTimer();
             StateChanged?.Invoke();
         }
@@ -191,15 +218,31 @@ public sealed class VeilDeskEngine : IAsyncDisposable
 
     public async Task StopAsync()
     {
-        if (!_running && _analysisTasks.Length == 0) return;
+        _running = false;
+        AppLog.Write("protection-stop", "explicit user stop");
+        try { _cts?.Cancel(); } catch { }
+        await _ui.InvokeAsync(() => _overlay.Stop());
+        await _lifecycle.WaitAsync();
+        try { await StopCoreAsync(); }
+        finally { _lifecycle.Release(); }
+    }
+
+    private async Task StopCoreAsync()
+    {
         _running = false;
         try { _cts?.Cancel(); } catch { }
+        foreach (var runner in _runners) runner.Pipeline.StopProtection();
+        if (_overlayTimer is { } timer) await timer.DisposeAsync();
+        _overlayTimer = null;
+        await _ui.InvokeAsync(() => _overlay.Stop());
         try
         {
             await Task.WhenAll(_analysisTasks).WaitAsync(TimeSpan.FromSeconds(4));
         }
         catch (TimeoutException)
         {
+            AppLog.Write("stop-waiting", "retaining ONNX resources until in-flight inference completes");
+            await Task.WhenAll(_analysisTasks);
         }
         catch (OperationCanceledException)
         {
@@ -212,11 +255,20 @@ public sealed class VeilDeskEngine : IAsyncDisposable
 
     private async Task CleanupAsync()
     {
-        _overlayTimer?.Dispose();
+        _running = false;
+        if (_overlayTimer is { } timer) await timer.DisposeAsync();
         _overlayTimer = null;
         _cts?.Dispose();
         _cts = null;
         _analysisTasks = Array.Empty<Task>();
+
+        // An explicit stop terminates protection. The supervisor moves to the
+        // stopped state so no safety cover can survive the shutdown, and the
+        // overlay windows are closed right afterwards.
+        foreach (var runner in _runners)
+        {
+            try { runner.Pipeline.StopProtection(); } catch { }
+        }
 
         await _ui.InvokeAsync(() => _overlay.Stop());
         await _capture.StopAsync();
@@ -236,13 +288,22 @@ public sealed class VeilDeskEngine : IAsyncDisposable
         _overlayTimer = new System.Threading.Timer(_ =>
         {
             if (!_running) return;
-            try { RenderOverlays(); } catch { /* overlay refresh is best-effort */ }
+            if (Interlocked.Exchange(ref _rendering, 1) != 0) return;
+            try { RenderOverlays(); }
+            catch (Exception ex) { AppLog.Write("overlay-refresh-error", ex.GetType().Name); }
+            finally { Volatile.Write(ref _rendering, 0); }
         }, null, 10, 33);
     }
 
     private void RenderOverlays()
     {
         var now = Environment.TickCount64;
+        if (now - _lastCaptureHealthMs >= 500)
+        {
+            _lastCaptureHealthMs = now;
+            UpdateCaptureHealth();
+        }
+
         foreach (var runner in _runners)
         {
             var regions = runner.Pipeline.GetRegions(_settings, runner.Monitor.LocalBounds, now);
@@ -251,6 +312,38 @@ public sealed class VeilDeskEngine : IAsyncDisposable
             var snapshot = Volatile.Read(ref runner.Snapshot);
             _overlay.Render(runner.Monitor.Id, regions, _settings, snapshot);
         }
+    }
+
+    /// <summary>
+    /// A broken capture session means the screen can no longer be vouched for.
+    /// The supervisor is told immediately so the whole output is covered.
+    /// </summary>
+    private void UpdateCaptureHealth()
+    {
+        foreach (var runner in _runners)
+        {
+            try
+            {
+                if (_capture.TryGetError(runner.Monitor.Id, out var error))
+                    runner.Pipeline.ReportCaptureFailure(error);
+                else
+                    runner.Pipeline.ReportCaptureHealthy();
+            }
+            catch
+            {
+                // Never let a status probe break protection.
+            }
+        }
+    }
+
+    /// <summary>
+    /// Writes every protection state transition to the local audit log. The
+    /// log makes an oscillating fail-closed state visible after the fact.
+    /// </summary>
+    private void OnProtectionStateChanged(ProtectionState previous, ProtectionState current, string? reason)
+    {
+        AppLog.Write("protection-state",
+            $"{previous} -> {current}{(string.IsNullOrWhiteSpace(reason) ? "" : ": " + reason)}");
     }
 
     private async Task AnalysisLoopAsync(MonitorRunner runner, CancellationToken token)
@@ -263,8 +356,14 @@ public sealed class VeilDeskEngine : IAsyncDisposable
             var frame = _capture.TryTakeFrame(runner.Monitor.Id);
             if (frame is null)
             {
+                // A retained frame is not new capture evidence. Replaying it
+                // could release fail-closed over a disconnected/frozen capture.
                 try { await Task.Delay(8, token); } catch (OperationCanceledException) { break; }
                 continue;
+            }
+            else
+            {
+                runner.Pipeline.ReportFrame(frame.TimestampMs);
             }
 
             var passStart = Stopwatch.GetTimestamp();

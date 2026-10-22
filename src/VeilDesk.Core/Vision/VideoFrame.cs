@@ -22,7 +22,7 @@ public sealed class VideoFrame : IDisposable
         long frameNumber,
         long timestampMs,
         string monitorId,
-        PixelRect monitorBounds,
+        PixelRect localBounds,
         DateTime capturedAtUtc)
     {
         _pixels = pixels;
@@ -32,7 +32,7 @@ public sealed class VideoFrame : IDisposable
         FrameNumber = frameNumber;
         TimestampMs = timestampMs;
         MonitorId = monitorId;
-        MonitorBounds = monitorBounds;
+        LocalBounds = localBounds;
         CapturedAtUtc = capturedAtUtc;
     }
 
@@ -42,7 +42,16 @@ public sealed class VideoFrame : IDisposable
     public long FrameNumber { get; }
     public long TimestampMs { get; }
     public string MonitorId { get; }
-    public PixelRect MonitorBounds { get; }
+
+    /// <summary>
+    /// Capture area of this frame in monitor-local physical pixels. The frame
+    /// content and every detection derived from it are monitor-local, so the
+    /// bounds must never contain virtual-desktop offsets. Clipping a local
+    /// rectangle against global bounds silently produced empty censor regions
+    /// on every secondary display.
+    /// </summary>
+    public PixelRect LocalBounds { get; }
+
     public DateTime CapturedAtUtc { get; }
     public bool IsDisposed => Volatile.Read(ref _pixels) is null;
 
@@ -77,7 +86,7 @@ public sealed class VideoFrame : IDisposable
         long frameNumber,
         long timestampMs,
         string monitorId,
-        PixelRect monitorBounds,
+        PixelRect localBounds,
         DateTime? capturedAtUtc = null)
     {
         if (width <= 0) throw new ArgumentOutOfRangeException(nameof(width));
@@ -85,13 +94,13 @@ public sealed class VideoFrame : IDisposable
         if (stride < width * 4) throw new ArgumentOutOfRangeException(nameof(stride));
         var buffer = ArrayPool<byte>.Shared.Rent(checked(stride * height));
         return new VideoFrame(buffer, width, height, stride, frameNumber, timestampMs,
-            monitorId, monitorBounds, capturedAtUtc ?? DateTime.UtcNow);
+            monitorId, localBounds, capturedAtUtc ?? DateTime.UtcNow);
     }
 
     public VideoFrame Clone()
     {
         var pixels = Pixels;
-        var clone = Rent(Width, Height, Stride, FrameNumber, TimestampMs, MonitorId, MonitorBounds, CapturedAtUtc);
+        var clone = Rent(Width, Height, Stride, FrameNumber, TimestampMs, MonitorId, LocalBounds, CapturedAtUtc);
         pixels.AsSpan(0, Stride * Height).CopyTo(clone.Pixels);
         return clone;
     }

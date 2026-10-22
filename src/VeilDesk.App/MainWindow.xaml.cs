@@ -61,6 +61,10 @@ public partial class MainWindow : Window
     private CensorVisual? _previewVisual;
     private BitmapSource? _previewSnapshot;
     private VideoRecorder? _recorder;
+    private HwndSource? _hotkeySource;
+    private bool _emergencyStopAvailable;
+    private bool _emergencyStopping;
+    private const int EmergencyStopId = 0x5644;
 
     public MainWindow()
     {
@@ -95,10 +99,45 @@ public partial class MainWindow : Window
             SaveSettings(showStatus: false);
         };
 
-        SourceInitialized += (_, _) => ApplyDarkTitleBar();
+        SourceInitialized += (_, _) =>
+        {
+            ApplyDarkTitleBar();
+            var hwnd = new WindowInteropHelper(this).Handle;
+            _hotkeySource = HwndSource.FromHwnd(hwnd);
+            _hotkeySource?.AddHook(OnHotkeyMessage);
+            _emergencyStopAvailable = RegisterHotKey(hwnd, EmergencyStopId, 0x4006, 0x7B);
+        };
+        Closed += (_, _) =>
+        {
+            UnregisterHotKey(new WindowInteropHelper(this).Handle, EmergencyStopId);
+            _hotkeySource?.RemoveHook(OnHotkeyMessage);
+        };
         ApplyPage(0, Pages[0]);
         UpdateStatus();
     }
+
+    private IntPtr OnHotkeyMessage(IntPtr hwnd, int message, IntPtr wParam, IntPtr lParam, ref bool handled)
+    {
+        if (message != 0x0312 || wParam.ToInt32() != EmergencyStopId) return IntPtr.Zero;
+        handled = true;
+        if (!_emergencyStopping)
+            Dispatcher.BeginInvoke(new Action(async () =>
+            {
+                if (_emergencyStopping) return;
+                _emergencyStopping = true;
+                try { await StopProtectionAsync(); }
+                finally { _emergencyStopping = false; }
+            }));
+        return IntPtr.Zero;
+    }
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool RegisterHotKey(IntPtr hwnd, int id, uint modifiers, uint key);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool UnregisterHotKey(IntPtr hwnd, int id);
 
     private void BuildRegionChecks()
     {
@@ -468,6 +507,12 @@ public partial class MainWindow : Window
     private async void StartStop_Click(object sender, RoutedEventArgs e)
     {
         if (_starting) return;
+        if (!_engine.IsRunning && !_emergencyStopAvailable)
+        {
+            MessageBox.Show(this, "Ctrl+Shift+F12 emergency stop could not be registered. Close the other app using this shortcut, then restart VeilDesk.",
+                "Emergency stop unavailable", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
         AppLog.Write("toggle", "running=" + _engine.IsRunning);
         if (_engine.IsRunning)
         {
@@ -527,6 +572,7 @@ public partial class MainWindow : Window
     private async Task StopProtectionAsync()
     {
         AppLog.Write("protection-stop-requested");
+        var stopTask = _engine.StopAsync();
         SetStartButtons(false, "Stopping…");
         if (_recorder is not null)
         {
@@ -542,7 +588,7 @@ public partial class MainWindow : Window
             _recorder = null;
             RecordButton.Content = "Start recording";
         }
-        try { await _engine.StopAsync(); }
+        try { await stopTask; }
         catch (Exception ex)
         {
             MessageBox.Show(this, ex.Message, "Stop reported an error",

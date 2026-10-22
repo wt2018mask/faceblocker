@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using VeilDesk.Core.Censoring;
 using VeilDesk.Core.Detection;
+using VeilDesk.Core.Safety;
 using VeilDesk.Core.Settings;
 using VeilDesk.Core.Tracking;
 using VeilDesk.Core.Vision;
@@ -29,18 +30,22 @@ public sealed record AnalysisResult(
 public sealed class VisionPipeline : IDisposable
 {
     private readonly VisionPipelineOptions _options;
-    private readonly VisionModels _models;
+    private readonly IVisionModelRunner _models;
     private readonly bool _ownsModels;
     private readonly SubjectTracker _tracker = new();
+    private readonly ConfidenceGate _confidenceGate = new();
+    private readonly ProtectionSupervisor _supervisor = new();
     private readonly float[] _nudeInput = new float[3 * FramePreprocessor.NudeNetSize * FramePreprocessor.NudeNetSize];
     private readonly float[] _personInput;
     private readonly float[] _segInput = new float[3 * FramePreprocessor.SegmentationSize * FramePreprocessor.SegmentationSize];
     private readonly object _gate = new();
+    // Never hold this short publication lock while running ONNX. Rendering
+    // must keep evaluating freshness even when inference stalls.
+    private readonly object _publicationGate = new();
 
     private long _lastSegmentationMs = long.MinValue / 2;
     private long _lastBodyMs = long.MinValue / 2;
     private IReadOnlyList<Detection> _lastBodyDetections = Array.Empty<Detection>();
-    private long _lastSuccessMs = -1;
     private int _consecutiveFailures;
     private string? _lastError;
 
@@ -53,12 +58,12 @@ public sealed class VisionPipeline : IDisposable
     /// Uses a model set shared by several monitor pipelines. The caller owns
     /// <paramref name="models"/> and must outlive every pipeline using it.
     /// </summary>
-    public VisionPipeline(VisionPipelineOptions options, VisionModels models)
+    public VisionPipeline(VisionPipelineOptions options, IVisionModelRunner models)
         : this(options, models, ownsModels: false)
     {
     }
 
-    private VisionPipeline(VisionPipelineOptions options, VisionModels models, bool ownsModels)
+    private VisionPipeline(VisionPipelineOptions options, IVisionModelRunner models, bool ownsModels)
     {
         _options = options;
         _models = models;
@@ -71,11 +76,43 @@ public sealed class VisionPipeline : IDisposable
     public string? LastError => _lastError;
     public int ModelPersonSize => _options.PersonModelSize;
 
+    /// <summary>Consecutive failed analysis passes.</summary>
+    public int ConsecutiveFailures => _consecutiveFailures;
+
+    /// <summary>
+    /// Begins a protection session for this display. Until the first
+    /// successful analysis the supervisor keeps the fail-closed state, so the
+    /// whole output is covered from the first frame.
+    /// </summary>
+    public void StartProtection(AppSettings settings, long nowMs)
+    {
+        lock (_gate)
+        lock (_publicationGate)
+        {
+            _tracker.Reset();
+            _confidenceGate.Reset();
+            _consecutiveFailures = 0;
+            _lastError = null;
+            _lastSegmentationMs = long.MinValue / 2;
+            _lastBodyMs = long.MinValue / 2;
+            _lastBodyDetections = Array.Empty<Detection>();
+            _supervisor.ApplySettings(settings);
+            _supervisor.Start(nowMs);
+        }
+    }
+
     public AnalysisResult Analyze(VideoFrame frame, AppSettings settings, long nowMs)
     {
         var total = Stopwatch.StartNew();
         double preprocessMs = 0, personMs = 0, nudeMs = 0, segmentMs = 0;
         var segmentationRan = false;
+
+        // A new inference attempt is not evidence that protection works. The
+        // supervisor keeps the fail-closed state until the pipeline proves
+        // itself again.
+        _supervisor.ApplySettings(settings);
+        _supervisor.ReportAttempt(nowMs);
+
         try
         {
             lock (_gate)
@@ -140,15 +177,25 @@ public sealed class VisionPipeline : IDisposable
                 all.AddRange(peopleWithMasks);
                 all.AddRange(body);
 
-                var tracks = _tracker.Update(all, nowMs, frame.MonitorBounds);
-                _lastSuccessMs = nowMs;
-                _consecutiveFailures = 0;
-                _lastError = null;
+                IReadOnlyList<TrackedDetection> tracks;
+                IReadOnlyList<CensorRegion> regions;
+                lock (_publicationGate)
+                {
+                    var completedMs = nowMs + total.ElapsedMilliseconds;
+                    if (_supervisor.State != ProtectionState.Stopped &&
+                        frame.TimestampMs > _supervisor.LastSuccessMs &&
+                        completedMs - frame.TimestampMs <= settings.Censoring.FailClosedAfterMs)
+                    {
+                        _tracker.Update(all, frame.TimestampMs, frame.LocalBounds);
+                        _supervisor.ReportSuccess(frame.TimestampMs);
+                    }
+                    _consecutiveFailures = 0;
+                    _lastError = null;
+                    tracks = _tracker.Snapshot();
+                    regions = GetRegions(settings, frame.LocalBounds, completedMs);
+                }
 
-                var regions = CensorComposer.Build(tracks, settings, frame.MonitorBounds, nowMs,
-                    FailClosedActive(settings, nowMs));
-
-                return new AnalysisResult(_lastBodyDetections, peopleWithMasks, tracks, regions,
+                return new AnalysisResult(body, peopleWithMasks, tracks, regions,
                     preprocessMs, personMs, nudeMs, segmentMs, total.Elapsed.TotalMilliseconds,
                     segmentationRan, null);
             }
@@ -157,8 +204,9 @@ public sealed class VisionPipeline : IDisposable
         {
             _consecutiveFailures++;
             _lastError = ex.Message;
+            _supervisor.ReportFailure(nowMs + total.ElapsedMilliseconds, ex.GetType().Name);
             return new AnalysisResult(Array.Empty<Detection>(), Array.Empty<Detection>(),
-                Array.Empty<TrackedDetection>(), GetRegions(settings, frame.MonitorBounds, nowMs),
+                Array.Empty<TrackedDetection>(), GetRegions(settings, frame.LocalBounds, nowMs),
                 preprocessMs, personMs, nudeMs, segmentMs, total.Elapsed.TotalMilliseconds,
                 segmentationRan, ex.Message);
         }
@@ -205,32 +253,69 @@ public sealed class VisionPipeline : IDisposable
 
     public bool FailClosedActive(AppSettings settings, long nowMs)
     {
-        if (!settings.Censoring.FailClosed) return false;
-        if (_lastSuccessMs < 0) return true;
-        if (_consecutiveFailures >= 2) return true;
-        return nowMs - _lastSuccessMs > settings.Censoring.FailClosedAfterMs;
+        _supervisor.ApplySettings(settings);
+        _supervisor.Evaluate(nowMs);
+        return _supervisor.EffectiveFailClosed(settings);
+    }
+
+    /// <summary>Current protection state, used for diagnostics and logging.</summary>
+    public ProtectionState ProtectionState => _supervisor.State;
+
+    /// <summary>Reason for the current protection state.</summary>
+    public string? ProtectionReason => _supervisor.Reason;
+
+    /// <summary>Raised when the protection state changes.</summary>
+    public event Action<ProtectionState, ProtectionState, string?>? ProtectionStateChanged
+    {
+        add => _supervisor.StateChanged += value;
+        remove => _supervisor.StateChanged -= value;
+    }
+
+    /// <summary>A new frame was captured for this display.</summary>
+    public void ReportFrame(long nowMs) => _supervisor.ReportFrame(nowMs);
+
+    /// <summary>The capture layer for this display failed.</summary>
+    public void ReportCaptureFailure(string? error) => _supervisor.ReportCaptureFailure(error);
+
+    /// <summary>The capture layer for this display is healthy again.</summary>
+    public void ReportCaptureHealthy() => _supervisor.ReportCaptureHealthy();
+
+    /// <summary>
+    /// Protection was explicitly stopped. This is not a safety pause: the
+    /// overlay is removed completely instead of covering the screen.
+    /// </summary>
+    public void StopProtection()
+    {
+        lock (_publicationGate) _supervisor.Stop();
     }
 
     public IReadOnlyList<CensorRegion> GetRegions(AppSettings settings, VeilDesk.Core.Geometry.PixelRect bounds, long nowMs)
     {
-        lock (_gate)
+        lock (_publicationGate)
         {
-            return CensorComposer.Build(_tracker.Snapshot(), settings, bounds, nowMs,
-                FailClosedActive(settings, nowMs));
+            _supervisor.ApplySettings(settings);
+            _supervisor.Evaluate(nowMs);
+            if (_supervisor.State == ProtectionState.Stopped) return Array.Empty<CensorRegion>();
+            var tracks = _tracker.Snapshot();
+            _confidenceGate.RetainOnly(tracks.Select(t => t.Id));
+            return CensorComposer.Build(tracks, settings, bounds, nowMs,
+                _supervisor.EffectiveFailClosed(settings), _confidenceGate);
         }
     }
 
     public IReadOnlyList<TrackedDetection> SnapshotTracks()
     {
-        lock (_gate) return _tracker.Snapshot();
+        return _tracker.Snapshot();
     }
 
     public void Reset()
     {
         lock (_gate)
+        lock (_publicationGate)
         {
+            _supervisor.Stop();
             _tracker.Reset();
-            _lastSuccessMs = -1;
+            _confidenceGate.Reset();
             _consecutiveFailures = 0;
             _lastError = null;
             _lastSegmentationMs = long.MinValue / 2;
@@ -241,6 +326,8 @@ public sealed class VisionPipeline : IDisposable
 
     public void Dispose()
     {
-        if (_ownsModels) _models.Dispose();
+        StopProtection();
+        lock (_gate)
+            if (_ownsModels) _models.Dispose();
     }
 }

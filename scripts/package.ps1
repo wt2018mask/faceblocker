@@ -15,7 +15,8 @@ param(
     [string]$Configuration = "Release",
     [string]$Runtime = "win-x64",
     [string]$Output = "",
-    [switch]$SkipZip
+    [switch]$SkipZip,
+    [switch]$NoRestore
 )
 
 $ErrorActionPreference = "Stop"
@@ -30,7 +31,9 @@ $publishDir = if ([string]::IsNullOrWhiteSpace($Output)) {
 $project = Join-Path $root "src\VeilDesk.App\VeilDesk.App.csproj"
 $models = Join-Path $root "models"
 $builtinPacks = Join-Path $root "builtin-packs"
-$zipPath = Join-Path $artifacts "VeilDesk-1.0.0-$Runtime.zip"
+$zipPath = if ($Output) { $publishDir + '.zip' } else { Join-Path $artifacts "VeilDesk-1.0.0-$Runtime.zip" }
+if (Test-Path -LiteralPath $publishDir) { throw "Preserving existing publish folder: $publishDir. Pass -Output with a new path." }
+if (-not $SkipZip -and (Test-Path -LiteralPath $zipPath)) { throw "Preserving existing archive: $zipPath. Pass -Output with a new path." }
 
 function Require-File([string]$Path, [string]$Hint = "") {
     if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
@@ -58,14 +61,11 @@ foreach ($entry in $manifest.models) {
     Write-Host ("  verified {0} ({1:N0} bytes, {2})" -f $entry.file, (Get-Item $file).Length, $entry.license)
 }
 
-if (Test-Path -LiteralPath $publishDir) {
-    Write-Host "==> Removing previous publish folder"
-    Remove-Item -LiteralPath $publishDir -Recurse -Force
-}
 New-Item -ItemType Directory -Force -Path $publishDir | Out-Null
 
 Write-Host "==> Publishing $Configuration / $Runtime (self-contained)"
-& dotnet publish $project `
+$restoreArgs = if ($NoRestore) { @('--no-restore') } else { @() }
+& dotnet publish $project @restoreArgs `
     -c $Configuration `
     -r $Runtime `
     --self-contained true `
@@ -141,7 +141,6 @@ Write-Host ("==> Publish folder: {0} ({1:N1} MB)" -f $publishDir, ($size / 1MB))
 
 if (-not $SkipZip) {
     Write-Host "==> Creating ZIP"
-    if (Test-Path -LiteralPath $zipPath) { Remove-Item -LiteralPath $zipPath -Force }
     Add-Type -AssemblyName System.IO.Compression.FileSystem
     [System.IO.Compression.ZipFile]::CreateFromDirectory(
         $publishDir, $zipPath,
@@ -151,7 +150,7 @@ if (-not $SkipZip) {
     Write-Host "    SHA256 $zipHash"
     # Stored outside the archive so documentation never has to embed the hash
     # of the archive that contains it (a self-referential, always-stale claim).
-    $hashFile = Join-Path $root "PACKAGE-SHA256.txt"
+    $hashFile = if ($Output) { $zipPath + '.sha256' } else { Join-Path $root "PACKAGE-SHA256.txt" }
     "$zipHash  $(Split-Path -Leaf $zipPath)" |
         Set-Content -LiteralPath $hashFile -Encoding ASCII
     Write-Host "    hash file: $hashFile"

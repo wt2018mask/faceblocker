@@ -1,4 +1,22 @@
-# Benchmarks and measurements
+# 최신 측정 — 2026-10-22 복구 세션
+
+CPU/GPU를 CIM으로 확인: Intel Core i7-1065G7 / Intel Iris Plus.
+이번에는 CPU만 실행했다. DirectML 성능 개선이나 현재 GPU 사용률을 주장하지 않는다.
+
+실행: `dotnet run --project tools/ProtectionProbe/ProtectionProbe.csproj -c Release --no-build -- models artifacts/live-test/david.jpg`.
+기존 로컬 조각상 이미지 한 장을 10회 분석, 회차 사이 140 ms 대기, 분석 내부 시간만 수집했다.
+모델 로드 489.2 ms. 전체 분석 nearest-rank P50 67.5 ms / P95 108.4 ms / P99 108.4 ms.
+표본 수 10이므로 P95/P99는 모두 최댓값이며 일반화할 수 없다.
+
+제어된 추론 정지 시험의 보호 영역 판정 4.54 ms. 이는 스케줄러와 판정 작업을 포함한 headless 측정이며
+실제 WPF 렌더링/합성기/화면 표시 지연이 아니다.
+정적 실제 검출 9개에서 검열 영역 2개를 합성해 128,082픽셀이 변경됐다. 정답 라벨 기반 정확도는 측정하지 않았다.
+
+현재 capture FPS, 데스크톱 end-to-end P50/P95/P99, 무검열 노출 시간, GPU 사용률,
+이동 대상/스크롤 정확도와 장기 메모리 사용량은 NOT RUN.
+아래는 이전 에이전트의 과거 측정이며 이번 세션에서 다시 측정한 값이 아니다.
+
+# Historical benchmarks and measurements
 
 All numbers below were measured on the stated machine on 2026-10-22 unless
 explicitly marked otherwise. They are development measurements, not marketing

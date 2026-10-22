@@ -44,6 +44,8 @@ public sealed class TrackedDetection
     public PersonGender Gender { get; internal set; }
     public bool IsPerson => Region == BodyRegion.Person;
 
+    internal TrackedDetection Copy() => (TrackedDetection)MemberwiseClone();
+
     public PixelRect PredictedBox(long nowMs, int horizonMs, double motionPadding, PixelRect bounds)
     {
         var seconds = Math.Max(0, nowMs - LastSeenMs) / 1000.0 + Math.Max(0, horizonMs) / 1000.0;
@@ -94,7 +96,7 @@ public sealed class SubjectTracker
 
     public IReadOnlyList<TrackedDetection> Snapshot()
     {
-        lock (_gate) return _tracks.ToList();
+        lock (_gate) return _tracks.Select(t => t.Copy()).ToList();
     }
 
     public int ActiveTrackCount { get { lock (_gate) return _tracks.Count; } }
@@ -203,7 +205,7 @@ public sealed class SubjectTracker
             }
 
             UpdatePersonEvidence(nowMs);
-            return _tracks.ToList();
+            return _tracks.Select(t => t.Copy()).ToList();
         }
     }
 

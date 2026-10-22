@@ -1,5 +1,12 @@
 # VeilDesk
 
+> 2026-10-22 복구 업데이트: 보호 회귀 39개, Release 빌드와 창 없는 실제 ONNX→검열 픽셀 합성 검증 PASS.
+> 수정 후 실제 화면 깜박임·비상키·Start/Stop·녹화는 대화형 검증 대기다. **production-ready 아님.**
+> 최신 상태: [복구 기록](docs/RECOVERY-20261022.md), [현재 상태](docs/CURRENT.md).
+> 안전한 비대화형 검증: `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Test-Headless.ps1`.
+> 대화형 스크립트는 `-Interactive`와 명시적 이미지/앱 경로가 필요하다. 기본 이미지나 자동 보호 재시작은 없다.
+> 비상 중지: `Ctrl+Shift+F12`(실제 키 입력은 검증 대기). 기존 배포 폴더는 보존하며 패키징에는 새로운 `-Output` 경로를 사용한다.
+
 **A local, privacy-first real-time censorship overlay for Windows 10/11 x64.**
 
 VeilDesk captures selected displays with Windows Graphics Capture, runs three

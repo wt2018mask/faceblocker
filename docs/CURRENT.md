@@ -1,4 +1,21 @@
-# Current state
+# 현재 상태 — 2026-10-22 복구 세션
+
+기존 작업 체크포인트: `9f0dd2e`. **생산 준비 완료 아님.**
+상세 근거와 재현 절차: [RECOVERY-20261022.md](RECOVERY-20261022.md).
+
+- PASS: 기존 26개 + 새 보호 회귀 13개 = 39개 테스트.
+- PASS: Release 빌드(분석기 비활성화 실행), 0 경고/0 오류.
+- PASS: 실제 VisionPipeline의 추론 정지 중 전체 보호와 Stop 후 늦은 결과 무시.
+- PASS: 전체 보호 불투명 모서리, 실제 로컬 ONNX→추적→해부학적 마스크 픽셀 합성(정적 이미지).
+- PASS: WPF Image Source/Stretch 초기화, 옵션 없는 뷰어/라이브 진입점의 실행 거부.
+- 실제 화면 테스트는 사용자 허용 대기. 이번 세션은 데스크톱 캡처·이미지 뷰어·보호 UI를 자동 실행하지 않았다.
+- M0/M1 PARTIAL, M2 정적 경로 PASS/라이브 NOT RUN. M3–M10 전체 완료를 주장하지 않는다.
+- 기존 자동 테스트 PID 18800만 식별 종료. Herdr/OpenCode 기록과 세션은 보존.
+
+아래는 **이전 에이전트의 역사 기록**이다. 과거의 23개 테스트, 라이브 실행, 잠긴 세션,
+배포 결과를 현재 세션의 새 검증으로 읽지 말 것. 이번 세션의 수치는 위와 TEST_RESULTS의 최신 절이 우선한다.
+
+# Historical snapshot
 
 **Snapshot:** 2026-10-22 (Asia/Seoul)
 **Project root:** `C:\Users\wt201\OneDrive\Desktop\blocker`

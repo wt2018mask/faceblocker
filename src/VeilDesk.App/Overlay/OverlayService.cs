@@ -67,8 +67,8 @@ public sealed class OverlayService : IDisposable
             try { window.Close(); } catch { }
         }
         _windows.Clear();
-        _pending.Clear();
         IsRunning = false;
+        lock (_pending) _pending.Clear();
         AllExcludedFromCapture = false;
     }
 
@@ -79,8 +79,15 @@ public sealed class OverlayService : IDisposable
         if (!IsRunning || _disposed) return;
         lock (_pending)
         {
+            if (!IsRunning || _disposed) return;
             _pending[monitorId] = new PendingFrame(regions, settings, snapshot);
         }
+    }
+
+    public void RenderImmediate(string monitorId, IReadOnlyList<CensorRegion> regions, AppSettings settings)
+    {
+        _dispatcher.VerifyAccess();
+        if (_windows.TryGetValue(monitorId, out var window)) window.Render(regions, settings, null);
     }
 
     public void Clear(string monitorId)
