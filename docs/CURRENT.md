@@ -1,6 +1,8 @@
 # 현재 상태 — 2026-10-22 복구 세션
 
 기존 작업 체크포인트: `9f0dd2e`. **생산 준비 완료 아님.**
+복구 브랜치: `codex/protection-recovery`. 패키지 전달 경로: `artifacts/VeilDesk-recovery-20261022-final.zip`
+(최종 해시는 같은 경로의 `.sha256`, 검증 결과는 `.verification.txt`에서 확인).
 상세 근거와 재현 절차: [RECOVERY-20261022.md](RECOVERY-20261022.md).
 
 - PASS: 기존 26개 + 새 보호 회귀 13개 = 39개 테스트.

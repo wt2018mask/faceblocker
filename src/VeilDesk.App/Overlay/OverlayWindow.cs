@@ -433,7 +433,7 @@ internal sealed class CensorVisual : Grid
 
         if (isFailClosed)
         {
-            _label.Text = "VEILDESK · PROTECTION PAUSED\nWaiting for fresh, stable analysis. Screen hidden.\nCtrl+Shift+F12: stop protection";
+            _label.Text = "VEILDESK · PROTECTION PAUSED\nWaiting for fresh, stable analysis. Screen hidden.\nCtrl+Shift+F10: stop protection";
             _label.Foreground = BrushFromHex("#E8ECF5");
             _label.FontSize = 20;
             _label.Visibility = Visibility.Visible;

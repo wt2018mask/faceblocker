@@ -1,5 +1,11 @@
 # 최신 실행 결과 — 2026-10-22 복구 세션
 
+패키징 PASS: x64 self-contained publish, 4개 모델 SHA-256 확인, 내부 SHA256SUMS와 ZIP 외부 해시 생성.
+첫 preview 폴더는 약 238.2 MB / ZIP 110.5 MB였으며 이후 F12→F10 수정으로 대체된다.
+최종 사용자 전달 경로는 `artifacts/VeilDesk-recovery-20261022-final/` 및 동일 이름의 `.zip`, `.zip.sha256`다.
+패키지 앱 실행/설치와 실제 비상키는 NOT RUN이며 final ZIP의 무결성 검증 결과는 외부 verification 파일로 남긴다.
+전체 분석기를 켠 publish는 기존 CA 스타일/성능/PInvoke 경고를 출력한다. 0경고 기록은 분석기를 끈 headless 빌드에 한정한다.
+
 패키징 준비 중 첫 실행은 PowerShell 단일 문자열 splat 오류(MSB1001)로 실패해 배열 타입으로 수정했다.
 그 다음 실행은 x64 런타임 assets 미복원(NETSDK1047)으로 실패했다.
 `dotnet restore src/VeilDesk.App/VeilDesk.App.csproj -r win-x64 --source "$env:USERPROFILE\.nuget\packages"`

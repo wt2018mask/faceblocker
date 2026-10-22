@@ -6,12 +6,15 @@
 
 다음 최우선 작업은 사용자가 허용한 60초 라이브 검증이다. 기존 앱은 사용자 UI에서 닫고,
 `scripts/Invoke-InteractiveValidation.ps1 -Interactive -ImagePath <명시적 파일> -AppPath <새 앱> -DurationSeconds 60`
-를 사용한다. 보호는 사용자가 켠다. Ctrl+Shift+F12가 초기화/전체 보호 중에도 창을 제거하는지,
+를 사용한다. 보호는 사용자가 켠다. Ctrl+Shift+F10가 초기화/전체 보호 중에도 창을 제거하는지,
 이동 대상의 실제 마스크 위치, Stop/재시작, 종료 후 창 잔존 여부를 확인한다.
 전역키 등록 실패 시 시작을 거부한다. 고장 난 네이티브 ONNX 실행은 창 제거 뒤 자원 해제가 지연될 수 있다.
 기존 `artifacts/live-test/run-live.ps1` 원본의 Guardian/터미널 최소화 루프를 재사용하지 않는다.
 
 최신 빌드와 패키지는 엔지니어링 미리보기이며 production-ready 판정이 아니다.
+최종 앱 경로: `artifacts/VeilDesk-recovery-20261022-final/VeilDesk.App.exe`.
+최종 ZIP: `artifacts/VeilDesk-recovery-20261022-final.zip`, 외부 해시: `.zip.sha256`, 검증 기록: `.zip.verification.txt`.
+기존 `VeilDesk-win-x64`와 중간 preview는 최신 수정판으로 오인하지 않는다.
 이하 절은 기존 역사 기록이다. 최신 게이트/명령과 충돌하면 이 절 및 RECOVERY 문서가 우선한다.
 
 # Historical handoff and resume guide

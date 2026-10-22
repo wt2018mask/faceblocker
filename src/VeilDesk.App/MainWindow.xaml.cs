@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.IO.Compression;
@@ -105,7 +105,7 @@ public partial class MainWindow : Window
             var hwnd = new WindowInteropHelper(this).Handle;
             _hotkeySource = HwndSource.FromHwnd(hwnd);
             _hotkeySource?.AddHook(OnHotkeyMessage);
-            _emergencyStopAvailable = RegisterHotKey(hwnd, EmergencyStopId, 0x4006, 0x7B);
+            _emergencyStopAvailable = RegisterHotKey(hwnd, EmergencyStopId, 0x4006, 0x79);
         };
         Closed += (_, _) =>
         {
@@ -509,7 +509,7 @@ public partial class MainWindow : Window
         if (_starting) return;
         if (!_engine.IsRunning && !_emergencyStopAvailable)
         {
-            MessageBox.Show(this, "Ctrl+Shift+F12 emergency stop could not be registered. Close the other app using this shortcut, then restart VeilDesk.",
+            MessageBox.Show(this, "Ctrl+Shift+F10 emergency stop could not be registered. Close the other app using this shortcut, then restart VeilDesk.",
                 "Emergency stop unavailable", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
