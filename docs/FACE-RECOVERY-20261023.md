@@ -1,3 +1,7 @@
+# 후속 사용자 확인 완료
+
+[INSTAGRAM-OBSERVED-20261023.md](INSTAGRAM-OBSERVED-20261023.md): 최신 실행에서 버튼·얼굴 가림·스크롤·클릭/입력/탭·Stop 정리를 사용자 관찰로 확인. 아래 초기 미검증 상태를 보완하며, 이전 실패 원인은 여전히 미확정.
+
 # Face 회귀 실행 경로 감사 — 2026-10-23
 
 기준 HEAD205cb4a, 체크포인트 `codex/checkpoint-face-recovery-20261023`. 작업 시작 당시 clean. 현재 프로세스는 Get-Process에서 조회되지 않았고 CIM 조회는 접근 불가였다. 따라서 사용자가 이전 패키지를 실행했다고 확정하지 않는다.
