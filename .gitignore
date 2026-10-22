@@ -1,0 +1,51 @@
+# Credentials and local configuration
+.env
+.env.*
+!.env.example
+!.env.sample
+*.pem
+*.p12
+*.pfx
+*.key
+*.keystore
+id_rsa
+id_rsa.*
+*credentials*.json
+*secrets*.json
+
+# Build output and installed dependencies
+node_modules/
+dist/
+build/
+out/
+release/
+artifacts/
+bin/
+obj/
+.venv/
+venv/
+env/
+__pycache__/
+.pytest_cache/
+.next/
+.nuxt/
+coverage/
+target/
+
+# IDE and machine-local files
+.vscode/
+.idea/
+*.user
+*.suo
+*.log
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Local runtime data and caches
+.cache/
+tmp/
+temp/
+*.sqlite
+*.sqlite3
+*.db
