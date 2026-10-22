@@ -95,9 +95,11 @@ public static class CensorComposer
                 detection.LocalFaceUncertaintyCover && track.Confidence >= Math.Min(0.35, threshold);
             if (!trusted && !uncertainFace) continue;
 
-            var box = track.PredictedBox(nowMs, censoring.PredictionHorizonMs, censoring.MotionPadding, monitorBounds)
+            var margin = track.Region == BodyRegion.Face
+                ? detection.FacePaddingFraction + (uncertainFace ? .12 : 0)
+                : censoring.MotionPadding;
+            var box = track.PredictedBox(nowMs, censoring.PredictionHorizonMs, margin, monitorBounds)
                 .Expand(censoring.MaskExpansion).Clip(monitorBounds);
-            if (uncertainFace) box = box.ExpandFraction(0.5).Clip(monitorBounds);
             if (box.IsEmpty || box.Area < 16) continue;
 
             result.Add(new CensorRegion(

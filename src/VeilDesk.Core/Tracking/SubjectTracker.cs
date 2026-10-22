@@ -48,13 +48,22 @@ public sealed class TrackedDetection
 
     public PixelRect PredictedBox(long nowMs, int horizonMs, double motionPadding, PixelRect bounds)
     {
+        if (Region == BodyRegion.Face)
+        {
+            // Holding a missed detection is a temporal policy, not permission
+            // to extrapolate it across the desktop for the full hold interval.
+            // Keep the complete observed box and a bounded local prediction.
+            return VeilDesk.Core.Censoring.FaceMaskGeometry.Predict(Box, VelocityX, VelocityY,
+                horizonMs, motionPadding, bounds);
+        }
         var seconds = Math.Max(0, nowMs - LastSeenMs) / 1000.0 + Math.Max(0, horizonMs) / 1000.0;
+        // Preserve the existing person/anatomical prediction policy.
         var predicted = SmoothedBox.Offset(VelocityX * seconds, VelocityY * seconds);
         var speed = Math.Sqrt(VelocityX * VelocityX + VelocityY * VelocityY);
         // Uncertainty grows with time since detection and with observed speed.
         var uncertainty = motionPadding + Math.Min(0.8, speed / 3000.0) * 0.25 + Math.Min(0.4, seconds);
         predicted = predicted.ExpandFraction(uncertainty);
-        return (Region == BodyRegion.Face ? predicted.Union(Box) : predicted).Clip(bounds);
+        return predicted.Clip(bounds);
     }
 }
 
@@ -161,12 +170,19 @@ public sealed class SubjectTracker
                     continue;
                 }
 
-                var previousCenterX = bestTrack.SmoothedBox.CenterX;
-                var previousCenterY = bestTrack.SmoothedBox.CenterY;
-                if (dt > 0.001)
+                var previousBox = bestTrack.Region == BodyRegion.Face ? bestTrack.Box : bestTrack.SmoothedBox;
+                var previousCenterX = previousBox.CenterX;
+                var previousCenterY = previousBox.CenterY;
+                // Missed passes are not observations of this face. Dividing
+                // its displacement by only the last global update interval
+                // inflates its speed; smoothed coordinates also invent motion
+                // after a scroll has stopped.
+                var velocityDt = bestTrack.Region == BodyRegion.Face
+                    ? Math.Max(0, nowMs - bestTrack.LastSeenMs) / 1000.0 : dt;
+                if (velocityDt > 0.001)
                 {
-                    var vx = (detection.Box.CenterX - previousCenterX) / dt;
-                    var vy = (detection.Box.CenterY - previousCenterY) / dt;
+                    var vx = (detection.Box.CenterX - previousCenterX) / velocityDt;
+                    var vy = (detection.Box.CenterY - previousCenterY) / velocityDt;
                     vx = Math.Clamp(vx, -6000, 6000);
                     vy = Math.Clamp(vy, -6000, 6000);
                     bestTrack.VelocityX = bestTrack.VelocityX * (1 - _options.VelocitySmoothing) + vx * _options.VelocitySmoothing;

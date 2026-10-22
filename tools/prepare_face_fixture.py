@@ -7,6 +7,7 @@ src=root/'assets/face-fixtures/astronaut.png'
 assert hashlib.sha256(src.read_bytes()).hexdigest()=='88431cd9653ccd539741b555fb0a46b61558b301d4110412b5bc28b5e3ea6cb5'
 shutil.copy2(src,out/'astronaut.png')
 shutil.copy2(root/'tools/browser-face/index.html',out/'index.html')
+shutil.copy2(root/'tools/browser-face/feed.html',out/'feed.html')
 im=cv2.imread(str(src))
 writer=cv2.VideoWriter(str(out/'moving.webm'),cv2.VideoWriter_fourcc(*'VP80'),20,(640,360))
 assert writer.isOpened(),'VP8 encoder unavailable'

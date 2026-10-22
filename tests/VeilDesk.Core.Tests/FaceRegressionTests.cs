@@ -9,6 +9,41 @@ namespace VeilDesk.Core.Tests;
 public class FaceRegressionTests
 {
     [Fact]
+    public void FaceVelocityDecaysWhenRawDetectionsStopMoving()
+    {
+        var tracker = new SubjectTracker();
+        var bounds = new PixelRect(0, 0, 1280, 720);
+        tracker.Update(new[] { new VeilDesk.Core.Detection.Detection(BodyRegion.Face, .9, new(300, 100, 80, 100)) }, 1000, bounds);
+        var moved = Assert.Single(tracker.Update(new[] { new VeilDesk.Core.Detection.Detection(BodyRegion.Face, .9, new(300, 200, 80, 100)) }, 1100, bounds));
+        var stopped = Assert.Single(tracker.Update(new[] { new VeilDesk.Core.Detection.Detection(BodyRegion.Face, .9, new(300, 200, 80, 100)) }, 1200, bounds));
+        Assert.Equal(moved.VelocityY * .55, stopped.VelocityY, 5);
+    }
+
+    [Fact]
+    public void FaceVelocityUsesElapsedTimeSinceThatTracksObservation()
+    {
+        var tracker = new SubjectTracker();
+        var bounds = new PixelRect(0, 0, 1280, 720);
+        tracker.Update(new[] { new VeilDesk.Core.Detection.Detection(BodyRegion.Face, .9, new(300, 100, 80, 100)) }, 1000, bounds);
+        tracker.Update(Array.Empty<VeilDesk.Core.Detection.Detection>(), 1100, bounds);
+        tracker.Update(Array.Empty<VeilDesk.Core.Detection.Detection>(), 1200, bounds);
+        var track = Assert.Single(tracker.Update(new[] { new VeilDesk.Core.Detection.Detection(BodyRegion.Face, .9, new(300, 190, 80, 100)) }, 1300, bounds));
+        Assert.Equal(135, track.VelocityY, 5); // 90px / .3s * .45 smoothing.
+    }
+
+    [Fact]
+    public void FacePredictionUsesLatestRawBoxInsteadOfTrailingSmoothedBox()
+    {
+        var tracker = new SubjectTracker();
+        var bounds = new PixelRect(0, 0, 1280, 720);
+        tracker.Update(new[] { new VeilDesk.Core.Detection.Detection(BodyRegion.Face, .9, new(300, 100, 80, 100)) }, 1000, bounds);
+        var track = Assert.Single(tracker.Update(new[] { new VeilDesk.Core.Detection.Detection(BodyRegion.Face, .9, new(300, 200, 80, 100)) }, 1100, bounds));
+        var prediction = track.PredictedBox(1100, 0, 0, bounds);
+        Assert.Equal(track.Box.CenterY, prediction.CenterY, 5);
+        Assert.True(prediction.IntersectionArea(track.Box) >= track.Box.Area - .001);
+    }
+
+    [Fact]
     public void UncertainFaceGetsExpandedCoverAndStrictModeRemainsAvailable()
     {
         var s = new AppSettings();
@@ -19,7 +54,11 @@ public class FaceRegressionTests
         var tracks = tracker.Update(new[] { new VeilDesk.Core.Detection.Detection(BodyRegion.Face, 0.354, box) }, 1000, bounds);
         var mask = Assert.Single(CensorComposer.Build(tracks, s, bounds, 1000, false));
         Assert.Equal(CensorRegionKind.UncertainFace, mask.Kind);
-        Assert.True(mask.Box.Area > box.Area * 4);
+        Assert.True(mask.Box.Area > box.Area);
+        s.Detection.FaceConfidence = .3;
+        var trusted = Assert.Single(CensorComposer.Build(tracks, s, bounds, 1000, false));
+        Assert.True(mask.Box.Area > trusted.Box.Area);
+        s.Detection.FaceConfidence = .6;
         Assert.Equal(box.Area, mask.Box.IntersectionArea(box));
         var guard = new VeilDesk.Core.Safety.CoverageGuard();
         Assert.False(guard.RequiresCover(tracks.Select(t => t.Id), new[] { mask.TrackId!.Value }, tracks.Select(t => t.Id)));

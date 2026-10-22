@@ -1,3 +1,15 @@
+# 최신 Face 기하와 짧은 사용자 안내 측정 (2026-10-22)
+
+상세 [BROWSER-GUIDED-20261022.md](BROWSER-GUIDED-20261022.md). 실제 화면 위치·영상 노출 증거와 구분한다.
+
+- 고정 기록 Face 기하1,068개: raw 포함 실패0, 최대 단일 면적78.4%→15.7%. 189×181px raw의2308×1366px mask→338×325px. 이 숫자는 동일 기록을 새 기하로 계산한 결과이며 실제 개선율이 아니다.
+- 수정 후3분 실제 시험: 로그 회전으로 마지막약37초334분석만 보존. 양성250/오류0/최대얼굴7, mask994개 중Missed>0인540개(오검출률 아님). 최대raw795×977px→mask1199×1242px(화면36.4%). 사용자는Instagram 스크롤 후 약2초 과대/엉뚱한 가림이 남는다고 보고했다.
+- 180초 process CPU476.47초/8logical(33.1% 평균), private peak600.23MiB/last569.66MiB. WGC·진단로그·Idle 포함 단기 수치, 장시간 안정성/누수 통과 아님.
+- 앞선10분 혼합 시험: Face450분석/양성296/오류0; TotalMs P50/P95/P99=47.4/105.8/199.3ms; frameAge=94/172/266ms. Face-only 연속10분 시험이 아니며 물리 overlay 지연이 아니다.
+- CPU/메모리·실제 inference·capture-to-analysis와 display/scanout latency를 혼동하지 않는다. 전체 기간별 원본 자원jsonl은로컬 artifacts, 화면 픽셀은 없음.
+
+아래는 이전 측정 이력이다.
+
 # Face 측정 추가 — 2026-10-22
 
 근거 [FACE-BROWSER-20261022.md](FACE-BROWSER-20261022.md). 숫자를 다른 경로의 지연으로 대체하지 않는다.

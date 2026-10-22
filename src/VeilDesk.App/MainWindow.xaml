@@ -136,15 +136,19 @@
                                                FontFamily="Segoe UI Variable Display, Segoe UI"/>
                                     <TextBlock x:Name="HeroBody" Style="{StaticResource Muted}" MaxWidth="620"
                                                Text="Choose targets, then start local desktop protection. Alt+S starts, stops, or cancels initialization. Ctrl+Shift+F10 stops protection from other applications."/>
-                                    <StackPanel Orientation="Horizontal" Margin="0,18,0,0">
+                                    <TextBlock x:Name="TargetSelectionText" Style="{StaticResource SmallLabel}" Margin="0,12,0,0" TextWrapping="Wrap"/>
+                                    <TextBlock x:Name="TargetSelectionHint" Style="{StaticResource Muted}" Margin="0,4,0,0" TextWrapping="Wrap"/>
+                                    <WrapPanel Margin="0,12,0,0">
                                         <Button x:Name="HeroStartButton" Content="Start protection"
                                                 Style="{StaticResource PrimaryButton}" Padding="20,10"
                                                 Click="StartStop_Click"/>
                                         <Button x:Name="FaceOnlyButton" Content="_Face only · black" Style="{StaticResource GhostButton}"
+                                                ToolTip="Select Face and solid black while stopped. Stop protection before changing targets."
+                                                ToolTipService.ShowOnDisabled="True"
                                                 Margin="10,0,0,0" Click="FaceOnly_Click"/>
                                         <Button Content="Open settings" Style="{StaticResource GhostButton}"
                                                 Margin="10,0,0,0" Click="GoSettings_Click"/>
-                                    </StackPanel>
+                                    </WrapPanel>
                                 </StackPanel>
                                 <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="24,0,0,0">
                                     <Border Background="{StaticResource AccentSoftBrush}" CornerRadius="12"
@@ -262,8 +266,10 @@
                                     <TextBlock Text="THRESHOLDS" Style="{StaticResource SectionTitle}"/>
                                     <TextBlock Text="Face confidence (YuNet)" Style="{StaticResource SmallLabel}"/>
                                     <Slider x:Name="FaceConfidenceSlider" Minimum="0.05" Maximum="0.95" Value="0.6" ValueChanged="SettingChanged" Margin="0,0,0,14"/>
+                                    <TextBlock Text="Face margin (default 12%)" Style="{StaticResource SmallLabel}"/>
+                                    <Slider x:Name="FacePaddingSlider" Minimum="0" Maximum="0.3" Value="0.12" SmallChange="0.01" LargeChange="0.05" ValueChanged="SettingChanged" Margin="0,0,0,10"/>
                                     <CheckBox x:Name="LocalFaceGuardCheck" Content="Expanded local guards for uncertain faces" Click="SettingChanged"/>
-                                    <TextBlock Text="Candidates below face confidence receive larger opaque black masks. Disable for strict full-screen uncertainty cover. Capture/inference failures still cover the whole screen." Style="{StaticResource Muted}" Margin="0,4,0,14"/>
+                                    <TextBlock Text="Face masks keep the full detected face plus a local margin. Uncertain candidates add 12% once. Disable local guards for strict full-screen uncertainty cover. Capture/inference failures still hide the screen." Style="{StaticResource Muted}" Margin="0,4,0,14"/>
                                     <Grid Margin="0,0,0,14">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*"/>

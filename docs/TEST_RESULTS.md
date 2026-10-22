@@ -1,3 +1,22 @@
+# 최신 사용자 안내 및 Face 국소 가림 검증 (2026-10-22)
+
+상세 근거: [BROWSER-GUIDED-20261022.md](BROWSER-GUIDED-20261022.md).
+
+| 항목 | 판정 |
+|---|---|
+| Core / Release / 기존 보호·녹화·YuNet | VERIFIED: 53/53, Release0경고/0오류(분석기 비활성화), 기존 headless probe PASS |
+| 원시 기준 속도·얼굴별 dt 회귀 | VERIFIED: 수정 전3/3 실패, 수정 후PASS |
+| 2초 외삽/중복 확장 회귀 | VERIFIED: 수정 전4/4 실패, 수정 후PASS; raw 전체 포함 유지 |
+| 기록 기하1,068개 | VERIFIED: 관측 상자 포함 실패0; 최대 단일 면적78.4%→15.7%, 화면 증거 아님 |
+| 실제 얼굴 검은 가림·저장 Face 재시작 | VERIFIED: 사용자 직접 확인 |
+| Stop 버튼 | PARTIAL: 사용자 Stop 사용 확인; 모든 시나리오의 정리/영상 증거는 없음 |
+| 수정 후 Instagram 스크롤 | PARTIAL / 결함 남음: 큰/엉뚱한 가림이 약2초 후 사라진다는 사용자 응답 |
+| Chrome 포커스 F10 / click-through / typing / tab / resize / video | NOT RUN/확정 응답 없음 |
+| 장시간 live / 움직이는 브라우저 export / 독립 패키지 | NOT RUN |
+| 물리 다중 모니터 / 릴리스 | BLOCKED: 장치1개 / 브라우저 필수 게이트 미통과 |
+
+10분·5분·3분 사용자 허용 시험은 모두 종료/소유 프로세스 정리 완료. 원시795×977px 후보가 새 빌드에서도 나타나 ROI 검증과 스크롤 추적이 남았다. 실제 픽셀 무노출·전체 안정성·M10 성공 주장 없음. 아래 기록은 이전 검증 이력이다.
+
 # 최신 Face 검증 — 2026-10-22
 
 [상세 증거/명령/한계](FACE-BROWSER-20261022.md).

@@ -449,7 +449,9 @@ public sealed class VeilDeskEngine : IAsyncDisposable, IRecordingSource
                 frameAgeMs = Environment.TickCount64 - frame.TimestampMs,
                 result.PreprocessMs, result.FaceMs, result.TotalMs, result.Error,
                 faces = result.FaceDetections.Select(f => new { f.Box, f.Confidence }),
-                masks = result.Regions.Select(r => new { r.Source, r.Kind, r.Box }),
+                masks = result.Regions.Select(r => new { r.TrackId, r.Source, r.Kind, r.Box }),
+                tracks = result.Tracks.Select(t => new { t.Id, t.Region, t.LastSeenMs, t.Missed,
+                    t.Box, t.SmoothedBox, t.VelocityX, t.VelocityY }),
                 state = runner.Pipeline.ProtectionState.ToString()
             }));
         if (snapshot is not null) Volatile.Write(ref runner.Snapshot, snapshot);

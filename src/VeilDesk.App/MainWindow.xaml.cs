@@ -122,6 +122,7 @@ public partial class MainWindow : Window
     private IntPtr OnHotkeyMessage(IntPtr hwnd, int message, IntPtr wParam, IntPtr lParam, ref bool handled)
     {
         if (message != 0x0312 || wParam.ToInt32() != EmergencyStopId) return IntPtr.Zero;
+        AppLog.Write("emergency-stop-hotkey", "Ctrl+Shift+F10 received");
         handled = true;
         if (!_emergencyStopping)
             Dispatcher.BeginInvoke(new Action(async () =>
@@ -172,6 +173,7 @@ public partial class MainWindow : Window
         SaveSettings(showStatus: false);
         UpdatePreview();
         HeroBody.Text = "Face selected · solid black. Start protection (Alt+S) to detect visible faces locally.";
+        AppLog.Write("targets-selected", "Face-only; Solid; #000000; opacity=1");
     }
 
     private void LoadSettingsToUi()
@@ -182,6 +184,7 @@ public partial class MainWindow : Window
             var c = _settings.Censoring;
             var d = _settings.Detection;
             FaceConfidenceSlider.Value = d.FaceConfidence;
+            FacePaddingSlider.Value = d.FacePaddingFraction;
             LocalFaceGuardCheck.IsChecked = d.LocalFaceUncertaintyCover;
             var p = _settings.Performance;
 
@@ -235,7 +238,7 @@ public partial class MainWindow : Window
 
             AboutVersion.Text = $"VeilDesk {typeof(MainWindow).Assembly.GetName().Version?.ToString(3) ?? "1.0.0"}";
             AboutRuntime.Text = $".NET {Environment.Version} · {RuntimeInformation.OSDescription} · x64";
-            AboutModels.Text = "NudeNet 320n (18 anatomical classes), YOLOv8n 320/480 (person), " +
+            AboutModels.Text = "YuNet (Face), NudeNet 320n (18 anatomical classes), YOLOv8n 320/480 (person), " +
                                "MediaPipe Selfie Segmentation (silhouette) — all ONNX, local only.";
         }
         finally
@@ -247,6 +250,7 @@ public partial class MainWindow : Window
         UpdatePreview();
         UpdateDisplayChecks();
         UpdateProviderLabels();
+        UpdateTargetSelection();
     }
 
     private static void SelectComboByTag(ComboBox combo, string tag)
@@ -307,6 +311,7 @@ public partial class MainWindow : Window
             .Select(x => (BodyRegion)x.Tag)
             .ToHashSet();
         d.FaceConfidence = FaceConfidenceSlider.Value;
+        d.FacePaddingFraction = FacePaddingSlider.Value;
         d.LocalFaceUncertaintyCover = LocalFaceGuardCheck.IsChecked == true;
         d.Confidence = ConfidenceSlider.Value;
         d.NmsIou = NmsSlider.Value;
@@ -355,6 +360,7 @@ public partial class MainWindow : Window
         _settings.Ui.StartMinimized = StartMinimizedCheck.IsChecked == true;
 
         SettingsValidator.ValidateAndClamp(_settings);
+        UpdateTargetSelection();
     }
 
     private void UpdatePreview()
@@ -655,6 +661,7 @@ public partial class MainWindow : Window
     {
         PageDetection.IsEnabled = !_starting && !_stopping && !_engine.IsRunning;
         FaceOnlyButton.IsEnabled = PageDetection.IsEnabled;
+        UpdateTargetSelection();
         HeaderStartButton.IsEnabled = enabled;
         HeroStartButton.IsEnabled = enabled;
         HeaderStartButton.Content = text;
@@ -662,6 +669,27 @@ public partial class MainWindow : Window
         HeaderStartButton.Style = _engine.IsRunning
             ? (Style)FindResource("DangerButton")
             : (Style)FindResource("PrimaryButton");
+    }
+
+    private void UpdateTargetSelection()
+    {
+        var d = _settings.Detection;
+        var targets = new List<string>();
+        if (d.EnabledRegions.Contains(BodyRegion.Face)) targets.Add("Face (YuNet)");
+        var anatomical = d.EnabledRegions.Count(r => (int)r < 18);
+        if (anatomical > 0) targets.Add($"{anatomical} anatomical regions");
+        if (d.WholeBodyEnabled) targets.Add("Whole person");
+        TargetSelectionText.Text = $"Targets: {(targets.Count == 0 ? "None" : string.Join(" + ", targets))} · {_settings.Censoring.Style} · {_settings.Censoring.Color}";
+        if (d.EnabledRegions.Contains(BodyRegion.Face))
+            TargetSelectionText.Text += $" · face margin {d.FacePaddingFraction:P0}";
+        TargetSelectionHint.Text = _starting || _stopping || _engine.IsRunning
+            ? "Targets are locked while protection is active or changing state. Stop protection to change them."
+            : "Choose targets before Start. Bring the browser to the front to protect its visible content.";
+        var faceBlack = d.EnabledRegions.SetEquals(new[] { BodyRegion.Face }) && !d.WholeBodyEnabled &&
+            _settings.Censoring.Style == CensorStyle.Solid &&
+            string.Equals(_settings.Censoring.Color, "#000000", StringComparison.OrdinalIgnoreCase) &&
+            _settings.Censoring.Opacity == 1;
+        FaceOnlyButton.Content = faceBlack ? "_Face selected · black" : "_Face only · black";
     }
 
     private void UpdateStatus()

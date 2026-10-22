@@ -36,6 +36,7 @@ public sealed class DetectionSettings
     };
 
     public double FaceConfidence { get; set; } = 0.6;
+    public double FacePaddingFraction { get; set; } = 0.12;
     public bool LocalFaceUncertaintyCover { get; set; } = true;
     public double Confidence { get; set; } = 0.35;
     public double NmsIou { get; set; } = 0.45;
@@ -179,6 +180,8 @@ public static class SettingsValidator
     {
         var d = settings.Detection;
         d.FaceConfidence = Math.Clamp(d.FaceConfidence, 0.05, 0.95);
+        d.FacePaddingFraction = double.IsFinite(d.FacePaddingFraction)
+            ? Math.Clamp(d.FacePaddingFraction, 0, .3) : .12;
         d.Confidence = Math.Clamp(d.Confidence, 0.05, 0.95);
         d.NmsIou = Math.Clamp(d.NmsIou, 0.1, 0.95);
         d.PersonConfidence = Math.Clamp(d.PersonConfidence, 0.05, 0.95);
