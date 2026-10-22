@@ -1,3 +1,7 @@
+# 최신 Face 회귀 감사 — 2026-10-23
+
+[FACE-RECOVERY-20261023.md](FACE-RECOVERY-20261023.md) 참조. Face preset 이름·build identity·명확한 실행 스크립트 추가. 실제 사용자 EXE 및 zero censorship 원인 미확정, 브라우저 회복 미검증. 아래는 이전 이력.
+
 # 최신 — 스크롤 추적·과잉 가림 수정 결과 (2026-10-22)
 
 자세한 근거: [FACE-SCROLL-FIX-20261022.md](FACE-SCROLL-FIX-20261022.md). 기준 `1b488be` 이후.

@@ -1,4 +1,4 @@
-﻿using System.Configuration;
+using System.Configuration;
 using System.Data;
 using System.IO;
 using System.Windows;
@@ -18,6 +18,7 @@ public partial class App : Application
         // must not end the protection silently. The failure is written to a
         // local log and the window stays usable.
         DispatcherUnhandledException += OnDispatcherUnhandledException;
+        AppLog.Write("build-identity", $"{typeof(App).Assembly.GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false).Cast<System.Reflection.AssemblyInformationalVersionAttribute>().FirstOrDefault()?.InformationalVersion}; executable={Environment.ProcessPath}; settings={AppPaths.SettingsFile}");
         base.OnStartup(e);
     }
 
