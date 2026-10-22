@@ -1,3 +1,24 @@
+# 최신 Face 검증 — 2026-10-22
+
+[상세 증거/명령/한계](FACE-BROWSER-20261022.md).
+
+| 항목 | 결과 |
+|---|---|
+| Core / Release | VERIFIED: 46/46,0경고/0오류(분석기 비활성화) |
+| 실제 YuNet | VERIFIED: 제한 fixture6/6,추가검출0,빈장면0,이동20/20·주석상자95% 가림20/20 |
+| 정적 영상 표본 | VERIFIED: 로컬 VP8 전체160프레임 decode,8개 표본 얼굴8/8 |
+| 모델 독립성 | VERIFIED: 얼굴 모델만 있는 폴더로 Face-only; 관련 없는 모델 미실행 |
+| 불확실 Face | VERIFIED headless: 확대 국소 보호의 모든 픽셀 불투명; Outline/10%/둥근모서리 적용 불가; 엄격 모드 유지 |
+| 기존 보호/녹화/캐시 | VERIFIED: 전체 fail-closed·늦은 결과/Stop·AVI Stop 수명·PNG/AVI·1000캐시 회귀 |
+| Face 정적 PNG/AVI | VERIFIED: 실제 YuNet 얼굴1개, PNG+디코딩25 AVI프레임 중심 검열 픽셀; uniqueSource1 |
+| 좌표 재생/만료/전역 보호 | VERIFIED headless: 2109회 커버리지 부족273→0, fresh 빈 화면 만료/오래된 증거 전체 보호 유지 |
+| 실제 캡처·UI | PARTIAL: WGC Face2109분석/225양성/최대5개/오류0, UI 선택/Start/Stop 접근키 |
+| 브라우저 사용성·물리 마스크 | NOT RUN/미검증: URL 확인 문제로 UI 자동화 중단, 사용자도 가림을 확인하지 못함 |
+| 수정 후 브라우저 재시험 | NOT RUN: 국소 불확실성/만료 수정은 비대화형 검증만 |
+| 물리 다중 화면 | BLOCKED: 연결1개 |
+
+이하 과거 결과:
+
 # 최신 실행 결과 — M1–M2 후속 세션 (2026-10-22)
 
 전체 근거/재현 명령: [ACCEPTANCE-20261022.md](ACCEPTANCE-20261022.md).

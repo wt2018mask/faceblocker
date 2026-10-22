@@ -1,3 +1,18 @@
+# 최신 — Face 브라우저 마일스톤 (2026-10-22)
+
+실제 YuNet Face 선택과 desktop 파이프라인을 구현했다. **브라우저 사용성 인수는 PARTIAL, 출시 준비 완료 아님.** 근거: [FACE-BROWSER-20261022.md](FACE-BROWSER-20261022.md).
+
+- VERIFIED: MIT YuNet, 공식 가중치 해시/입출력, Face-only 독립 모델 로드·실행, 기존 해부학적 기능 유지.
+- VERIFIED: Core46/46, Release, 실제 모델 fixture6/6 및 이동20/20, 로컬 VP8 표본8/8, 보호·녹화·캐시 회귀.
+- VERIFIED: 실제 YuNet 정적 PNG/AVI25프레임, 기존 실제 해부학적2개 보존. 좌표 재생2109회 커버리지 부족273→0.
+- PARTIAL: 허용된5분 Chrome 시험, 실제 Face WGC 분석2109회/양성225회/최대5개/오류0, UI Face 선택·Start·Stop 접근키. 물리 표시를 사용자가 확인하지 못했다.
+- FIXED(headless): 낮은 신뢰도 후보에 확대 불투명 국소 가림; 만료된 Face의 전역 보호 요구 제거. 엄격 모드 선택 가능, 기존 global Fail-Closed 유지. 수정 후 대화형 재시험 NOT RUN.
+- BLOCKED(UI 자동화): Computer Use의 Chrome URL 확인 불확실성으로 중단. 추가 입력 없음, 소유 시험 프로세스 정리 완료.
+- NOT RUN: 브라우저 스크롤·영상·click-through·탭/창 이동·브라우저 포커스 비상키·실제 Cancel·장시간 live·수정 후 얼굴 물리 정렬.
+- 다음은 새 허용하의 수정 후 브라우저 시연이다. 기존 ZIP952380a는 이번 Face 기능을 포함하지 않는다. M10 진행 안 함.
+
+아래 기록은 이전 검증 이력이다.
+
 # 현재 상태 — M1–M2 후속 검증 (2026-10-22)
 
 브랜치 `codex/protection-recovery`, 기준 `952380a` 이후 작업.

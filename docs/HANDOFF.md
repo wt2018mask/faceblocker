@@ -1,3 +1,17 @@
+# 최신 인계 — Face 실제 브라우저 (2026-10-22)
+
+[FACE-BROWSER-20261022.md](FACE-BROWSER-20261022.md)를 먼저 읽는다. 기준d58ab97 이후 실제 YuNet·선택적 모델·메인 Face UI·추적 가림 개선을 추가했다. 새 요청 없이 기존 프로토타입을 다시 만들지 않는다.
+
+실제5분 시험에서 Face WGC2109회/양성225회/최대5개/오류0 및 메인 UI Stop/Face 선택/Start 접근키 확인. **육안·표시 프레임 검증 없음, 사용자는 확인하지 못했다고 응답.** Computer Use의 Chrome URL 정책 확인 실패로 UI 제어 중단. 자동화가 다시 가능하다고 가정하지 말 것. 허용 시간 종료/소유 프로세스 정리 완료.
+
+26초 초기 전체 가림 원인을 좌표 재생으로 재현해 Face 국소 불확실성 가림과 만료 정책을 수정했다. UI에 설명/엄격 모드 스위치가 있다. 기존 해부학적/전역 Fail-Closed는 유지한다. 수정 후 실제 브라우저 재시연부터 필요하다. 좌표 재생2109회 커버리지 부족273→0 및 Face freshness 전역 보호 회귀 PASS. 실제 Face 정적 PNG/AVI25프레임/기존 해부학적2개 보존도 확인했다. 새 명시적 허용 전 창·보호·입력 실행 금지.
+
+`tools/FaceProbe`는 실제 ONNX 및 제한된 NASA fixture; 일반 정확도 벤치마크가 아니다. `tools/prepare_face_fixture.py`는 개발용 cv2/numpy로 VP8/페이지를 만들며 창을 열지 않는다. `scripts/Invoke-BrowserAcceptance.ps1`은 -Interactive/BrowserPath 필수, 최대시간/소유 PID 정리/loopback/별도 프로필을 사용한다. 화면 픽셀 저장·전송 금지. API/합성 결과를 물리 화면 성공으로 승격하지 말 것.
+
+최종 Core46/46 및 기존 보호·녹화·캐시 회귀. 기존 ZIP은952380a라 새 기능이 없다. M10/릴리스 보류. 다음 게이트: 실제 Face 가림·스크롤·영상·click-through·다른 창 포커스 F10·Stop/Cancel → 장시간 WGC/자원 → 움직이는 실제 capture export.
+
+이하 과거 인계:
+
 # 최신 이어받기 — M1–M2 후속 작업
 
 `952380a` 이후 검증: [ACCEPTANCE-20261022.md](ACCEPTANCE-20261022.md).

@@ -1,3 +1,7 @@
+# Face development update — 2026-10-22
+
+Dedicated local YuNet face detection and Face-only UI are implemented. Browser usability acceptance is **PARTIAL**; this is not a release-ready claim. Evidence and limitations: [Face browser milestone](docs/FACE-BROWSER-20261022.md). Existing ZIP packages do not include these changes.
+
 # VeilDesk
 
 > M1–M2 후속 검증: 단일 실제 화면의 좌표 오차 최대0.484px, 엔진 초기화 취소,
