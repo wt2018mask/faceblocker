@@ -468,6 +468,7 @@ public partial class MainWindow : Window
     private async void StartStop_Click(object sender, RoutedEventArgs e)
     {
         if (_starting) return;
+        AppLog.Write("toggle", "running=" + _engine.IsRunning);
         if (_engine.IsRunning)
         {
             await StopProtectionAsync();
@@ -498,6 +499,7 @@ public partial class MainWindow : Window
         {
             SaveSettings(showStatus: false);
             await _engine.StartAsync(_settings, _monitors);
+            AppLog.Write("protection-started", $"monitors={_monitors.Count} provider={_engine.Provider}");
             StateText.Text = "Protecting";
             HeroEyebrow.Text = "PROTECTION ON";
             HeroTitle.Text = "Your displays are covered.";
@@ -506,6 +508,7 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
+            AppLog.WriteException("protection-start-failed", ex);
             StateText.Text = "Idle";
             HeroEyebrow.Text = "PROTECTION OFF";
             HeroTitle.Text = "Your screen is not being captured.";
@@ -523,6 +526,7 @@ public partial class MainWindow : Window
 
     private async Task StopProtectionAsync()
     {
+        AppLog.Write("protection-stop-requested");
         SetStartButtons(false, "Stopping…");
         if (_recorder is not null)
         {
@@ -733,7 +737,8 @@ public partial class MainWindow : Window
             try
             {
                 var path = await _recorder.StopAsync();
-                RecordStatus.Text = "Saved: " + path;
+                RecordStatus.Text = $"Saved: {path} ({_recorder.FramesWritten} frames, " +
+                    $"{_recorder.MeasuredSourceFps:0.0} capture fps measured)";
             }
             catch (Exception ex)
             {
@@ -783,10 +788,25 @@ public partial class MainWindow : Window
 
     private void OpenExportDir_Click(object sender, RoutedEventArgs e)
     {
-        var dir = string.IsNullOrWhiteSpace(ExportDirBox.Text)
-            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyPictures), "VeilDesk")
-            : Environment.ExpandEnvironmentVariables(ExportDirBox.Text);
-        Directory.CreateDirectory(dir);
+        var fallback = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.MyPictures), "VeilDesk");
+        if (!ExportDirectory.TryResolveOrDefault(ExportDirBox.Text, fallback, out var dir, out var error))
+        {
+            // A pasted URL or a relative path must never reach the file system.
+            ExportStatus.Text = error ?? "That export folder cannot be used.";
+            return;
+        }
+
+        try
+        {
+            Directory.CreateDirectory(dir);
+        }
+        catch (Exception ex)
+        {
+            ExportStatus.Text = "Could not create the export folder: " + ex.Message;
+            return;
+        }
+
         OpenPath(dir);
     }
 
@@ -1371,6 +1391,7 @@ public partial class MainWindow : Window
         e.Cancel = true;
         if (_closingStarted) return;
         _closingStarted = true;
+        AppLog.Write("window-closing");
         _statusTimer.Stop();
         _saveTimer.Stop();
         try

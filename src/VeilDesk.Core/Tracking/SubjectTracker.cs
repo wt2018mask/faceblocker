@@ -18,7 +18,17 @@ public sealed class TrackedDetection
     public required BodyRegion Region { get; init; }
     public PixelRect Box { get; internal set; }
     public PixelRect SmoothedBox { get; internal set; }
+
+    /// <summary>
+    /// Smoothed confidence of the track. This is an exponential moving average
+    /// of the raw detector scores, so a single marginal detection cannot make
+    /// the confidence collapse and the censor mask disappear.
+    /// </summary>
     public double Confidence { get; internal set; }
+
+    /// <summary>Confidence reported by the most recent matching detection.</summary>
+    public double RawConfidence { get; internal set; }
+
     public double VelocityX { get; internal set; }
     public double VelocityY { get; internal set; }
     public long FirstSeenMs { get; init; }
@@ -54,6 +64,13 @@ public sealed class TrackerOptions
     public double BoxSmoothing { get; set; } = 0.65;
     public int MaxMissedFrames { get; set; } = 30;
     public int EvidenceMemoryMs { get; set; } = 2000;
+
+    /// <summary>
+    /// Weight of the newest detector score in the smoothed track confidence.
+    /// 1.0 would disable smoothing; 0.4 keeps a marginal detection from
+    /// removing a censor mask that a strong detection just established.
+    /// </summary>
+    public double ConfidenceSmoothing { get; set; } = 0.4;
 }
 
 /// <summary>
@@ -131,6 +148,7 @@ public sealed class SubjectTracker
                         Box = detection.Box,
                         SmoothedBox = detection.Box,
                         Confidence = detection.Confidence,
+                        RawConfidence = detection.Confidence,
                         FirstSeenMs = nowMs,
                         LastSeenMs = nowMs,
                         LastPredictionMs = nowMs
@@ -156,7 +174,15 @@ public sealed class SubjectTracker
                 var alpha = _options.BoxSmoothing;
                 bestTrack.SmoothedBox = Lerp(bestTrack.SmoothedBox, detection.Box, alpha);
                 bestTrack.Box = detection.Box;
-                bestTrack.Confidence = detection.Confidence;
+                // The raw detector score is kept for diagnostics, but the
+                // confidence that decides whether a censor mask is drawn is
+                // smoothed. Without this a single marginal detection removes
+                // the mask and the next strong detection restores it, which is
+                // exactly the visible flicker this project must not have.
+                var confidenceAlpha = Math.Clamp(_options.ConfidenceSmoothing, 0.01, 1.0);
+                bestTrack.Confidence = bestTrack.Confidence * (1.0 - confidenceAlpha) +
+                    detection.Confidence * confidenceAlpha;
+                bestTrack.RawConfidence = detection.Confidence;
                 bestTrack.LastSeenMs = nowMs;
                 bestTrack.LastPredictionMs = nowMs;
                 bestTrack.Missed = 0;

@@ -37,6 +37,8 @@ public sealed class VideoRecorder
     private bool _stopping;
     private volatile string? _error;
     private long _framesWritten;
+    private long _sourceFrames;
+    private long _startTimestamp;
 
     public VideoRecorder(VeilDeskEngine engine, AppSettings settings, string monitorId,
         bool includeCensorship)
@@ -50,6 +52,21 @@ public sealed class VideoRecorder
 
     public string? LastError => _error;
     public long FramesWritten => Interlocked.Read(ref _framesWritten);
+
+    /// <summary>Captured (unique) frames; lower than <see cref="FramesWritten"/> when the timeline is filled.</summary>
+    public long SourceFrames => Interlocked.Read(ref _sourceFrames);
+
+    /// <summary>Measured capture rate of the recorder, in frames per second.</summary>
+    public double MeasuredSourceFps
+    {
+        get
+        {
+            var source = SourceFrames;
+            if (source <= 0 || _startTimestamp == 0) return 0;
+            var seconds = Stopwatch.GetElapsedTime(_startTimestamp).TotalSeconds;
+            return seconds > 0 ? source / seconds : 0;
+        }
+    }
 
     public async Task<string> StartAsync()
     {
@@ -71,6 +88,7 @@ public sealed class VideoRecorder
         _path = Path.Combine(directory,
             $"VeilDesk-{DateTime.Now:yyyyMMdd-HHmmss}-{Sanitize(monitor.FriendlyName)}.avi");
         _writer = new MjpegAviWriter(_path, width, height, FramesPerSecond);
+        _startTimestamp = Stopwatch.GetTimestamp();
         _started = true;
         _loop = Task.Run(() => RecordLoopAsync(width, height, _cts.Token));
         await Task.CompletedTask;
@@ -113,6 +131,13 @@ public sealed class VideoRecorder
     private async Task RecordLoopAsync(int width, int height, CancellationToken token)
     {
         var interval = TimeSpan.FromSeconds(1.0 / FramesPerSecond);
+        // The AVI timeline is fixed at FramesPerSecond. Capture on this machine
+        // can be slower than that, so a captured frame is repeated until the
+        // timeline catches up with the wall clock. Without this the file would
+        // declare 15 fps while containing fewer frames and would play back
+        // faster than the recorded session.
+        var startTimestamp = Stopwatch.GetTimestamp();
+        long timelineFrames = 0;
         while (!token.IsCancellationRequested)
         {
             var started = Stopwatch.GetTimestamp();
@@ -125,8 +150,6 @@ public sealed class VideoRecorder
                     continue;
                 }
 
-                // Capture is already fixed at 15 fps; duplicate only when the
-                // source has not produced a new frame so the AVI stays CFR.
                 var bitmap = FrameImage.ToBitmap(capture.Frame);
                 BitmapSource output = bitmap;
                 if (_includeCensorship)
@@ -144,8 +167,16 @@ public sealed class VideoRecorder
                 }
 
                 var jpeg = await Task.Run(() => EncodeJpeg(output), token);
-                _writer?.WriteFrame(jpeg);
-                Interlocked.Increment(ref _framesWritten);
+                var elapsedSeconds = Stopwatch.GetElapsedTime(startTimestamp).TotalSeconds;
+                var targetFrames = (long)Math.Round(elapsedSeconds * FramesPerSecond);
+                do
+                {
+                    _writer?.WriteFrame(jpeg);
+                    timelineFrames++;
+                    Interlocked.Increment(ref _framesWritten);
+                }
+                while (timelineFrames < targetFrames);
+                Interlocked.Increment(ref _sourceFrames);
             }
             catch (OperationCanceledException)
             {

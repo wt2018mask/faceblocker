@@ -44,6 +44,15 @@ public static class CensorComposer
         var detection = settings.Detection;
         var persistence = censoring.TrackPersistenceMs;
 
+        // Confidence hysteresis. A mask is acquired at the configured
+        // threshold but only released below a lower one, so a detector whose
+        // score oscillates around the threshold keeps the mask instead of
+        // flickering it on and off. The track confidence itself is already
+        // smoothed by the tracker.
+        var releaseRatio = Math.Clamp(censoring.ConfidenceReleaseRatio, 0.1, 1.0);
+        var bodyRelease = detection.Confidence * releaseRatio;
+        var personRelease = detection.WholeBodyConfidence * releaseRatio;
+
         foreach (var track in tracks)
         {
             var age = nowMs - track.LastSeenMs;
@@ -52,7 +61,7 @@ public static class CensorComposer
             if (track.IsPerson)
             {
                 if (!detection.WholeBodyEnabled) continue;
-                if (track.Confidence < detection.WholeBodyConfidence) continue;
+                if (track.Confidence < personRelease) continue;
                 if (detection.WholeBodyNudeOnly && !track.HasExposedEvidence) continue;
                 if (track.Gender == PersonGender.Female && !detection.WholeBodyFemale) continue;
                 if (track.Gender == PersonGender.Male && !detection.WholeBodyMale) continue;
@@ -76,7 +85,7 @@ public static class CensorComposer
             }
 
             if (!detection.EnabledRegions.Contains(track.Region)) continue;
-            if (track.Confidence < detection.Confidence) continue;
+            if (track.Confidence < bodyRelease) continue;
 
             var box = track.PredictedBox(nowMs, censoring.PredictionHorizonMs, censoring.MotionPadding, monitorBounds)
                 .Expand(censoring.MaskExpansion);

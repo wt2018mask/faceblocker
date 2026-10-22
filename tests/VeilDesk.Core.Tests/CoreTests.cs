@@ -515,3 +515,45 @@ public class SessionTests
         if (File.Exists(path)) File.Delete(path);
     }
 }
+
+public class ExportDirectoryTests
+{
+    [Fact]
+    public void ExportDirectory_RejectsUrlsAndRelativePaths()
+    {
+        Assert.False(ExportDirectory.TryResolve("https://x.com/", out _, out var urlError));
+        Assert.NotNull(urlError);
+
+        Assert.False(ExportDirectory.TryResolve("https:\\x.com\\", out _, out _));
+        Assert.False(ExportDirectory.TryResolve("relative\\folder", out _, out _));
+        Assert.False(ExportDirectory.TryResolve("   ", out _, out _));
+        Assert.False(ExportDirectory.TryResolve(new string('a', ExportDirectory.MaxLength + 1), out _, out _));
+    }
+
+    [Fact]
+    public void ExportDirectory_AcceptsAbsolutePathAndFallback()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "veildesk-export-" + Guid.NewGuid().ToString("N"));
+        Assert.True(ExportDirectory.TryResolve(root, out var resolved, out var error));
+        Assert.Null(error);
+        Assert.Equal(Path.GetFullPath(root), resolved, StringComparer.OrdinalIgnoreCase);
+
+        Assert.True(ExportDirectory.TryResolveOrDefault("", root, out var fallback, out var fallbackError));
+        Assert.Null(fallbackError);
+        Assert.Equal(root, fallback);
+    }
+
+    [Fact]
+    public void SettingsValidator_DropsUnusableExportDirectory()
+    {
+        var settings = new AppSettings();
+        settings.Creator.ExportDirectory = "https://x.com/";
+        SettingsValidator.ValidateAndClamp(settings);
+        Assert.Equal(string.Empty, settings.Creator.ExportDirectory);
+
+        var good = Path.Combine(Path.GetTempPath(), "veildesk-export-" + Guid.NewGuid().ToString("N"));
+        settings.Creator.ExportDirectory = good;
+        SettingsValidator.ValidateAndClamp(settings);
+        Assert.Equal(Path.GetFullPath(good), settings.Creator.ExportDirectory, StringComparer.OrdinalIgnoreCase);
+    }
+}

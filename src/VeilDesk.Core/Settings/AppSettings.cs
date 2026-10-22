@@ -64,9 +64,38 @@ public sealed class CensorSettings
     public double MaskExpansion { get; set; } = 6;
     public double MotionPadding { get; set; } = 0.18;
     public int PredictionHorizonMs { get; set; } = 80;
-    public int TrackPersistenceMs { get; set; } = 550;
+    /// <summary>
+    /// How long a censor mask stays valid after the last detection that
+    /// supported it. This is the window in which a temporary detection failure
+    /// does not expose the subject.
+    /// </summary>
+    public int TrackPersistenceMs { get; set; } = 2000;
     public bool FailClosed { get; set; } = true;
+
+    /// <summary>
+    /// How long the pipeline may go without a successful analysis before the
+    /// whole output is covered.
+    /// </summary>
     public int FailClosedAfterMs { get; set; } = 1500;
+
+    /// <summary>
+    /// Minimum time the safety cover stays in place before it may be lifted.
+    /// This is the hysteresis that stops the cover from blinking on and off.
+    /// </summary>
+    public int FailClosedRecoveryMs { get; set; } = 1000;
+
+    /// <summary>
+    /// Number of consecutive successful analyses required before the safety
+    /// cover is lifted. A new inference attempt alone never clears it.
+    /// </summary>
+    public int FailClosedRecoveryPasses { get; set; } = 2;
+
+    /// <summary>
+    /// Hysteresis ratio for the confidence gate. A mask is released when the
+    /// smoothed confidence falls below <c>threshold * ratio</c>, so a single
+    /// marginal detection cannot make the mask disappear.
+    /// </summary>
+    public double ConfidenceReleaseRatio { get; set; } = 0.7;
     public bool ShowDebugBoxes { get; set; }
     public bool ShowSubjectLabels { get; set; }
 }
@@ -164,7 +193,16 @@ public static class SettingsValidator
         c.MotionPadding = Math.Clamp(c.MotionPadding, 0, 1.0);
         c.PredictionHorizonMs = Math.Clamp(c.PredictionHorizonMs, 0, 500);
         c.TrackPersistenceMs = Math.Clamp(c.TrackPersistenceMs, 0, 5000);
-        c.FailClosedAfterMs = Math.Clamp(c.FailClosedAfterMs, 0, 10000);
+        c.FailClosedAfterMs = Math.Clamp(c.FailClosedAfterMs, 0, 5000);
+        c.FailClosedRecoveryMs = Math.Clamp(c.FailClosedRecoveryMs, 0, 10000);
+        c.FailClosedRecoveryPasses = Math.Clamp(c.FailClosedRecoveryPasses, 1, 10);
+        c.ConfidenceReleaseRatio = Math.Clamp(c.ConfidenceReleaseRatio, 0.1, 1.0);
+
+        // Safety invariant: the censor mask must stay valid at least as long
+        // as the pipeline is allowed to produce no evidence. Otherwise the
+        // mask would expire first and the safety cover would only arrive
+        // afterwards, leaving a window in which nothing is censored at all.
+        if (c.TrackPersistenceMs < c.FailClosedAfterMs) c.TrackPersistenceMs = c.FailClosedAfterMs;
         if (!IsHexColor(c.Color)) c.Color = "#0B0D12";
         if (!IsHexColor(c.BorderColor)) c.BorderColor = "#FFFFFF";
         if (!IsHexColor(c.TextColor)) c.TextColor = "#FFFFFF";
@@ -190,6 +228,17 @@ public static class SettingsValidator
         creator.VideoFormat = creator.VideoFormat is "mp4" or "mkv" ? creator.VideoFormat : "mp4";
         creator.WatermarkText = (creator.WatermarkText ?? "").Trim();
         if (creator.WatermarkText.Length > 80) creator.WatermarkText = creator.WatermarkText[..80];
+        // A folder that is not a usable absolute path (a pasted URL, a
+        // relative path, illegal characters) is dropped instead of being
+        // persisted and later crashing a file write.
+        creator.ExportDirectory = (creator.ExportDirectory ?? "").Trim();
+        if (creator.ExportDirectory.Length > 0)
+        {
+            if (ExportDirectory.TryResolve(creator.ExportDirectory, out var resolved, out _))
+                creator.ExportDirectory = resolved;
+            else
+                creator.ExportDirectory = string.Empty;
+        }
 
         if (settings.Ui.Language is not ("en" or "ko")) settings.Ui.Language = "en";
         if (settings.SchemaVersion < 1) settings.SchemaVersion = 1;
