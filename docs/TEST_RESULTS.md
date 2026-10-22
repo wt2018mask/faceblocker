@@ -1,5 +1,10 @@
 # 최신 실행 결과 — 2026-10-22 복구 세션
 
+패키징 준비 중 첫 실행은 PowerShell 단일 문자열 splat 오류(MSB1001)로 실패해 배열 타입으로 수정했다.
+그 다음 실행은 x64 런타임 assets 미복원(NETSDK1047)으로 실패했다.
+`dotnet restore src/VeilDesk.App/VeilDesk.App.csproj -r win-x64 --source "$env:USERPROFILE\.nuget\packages"`
+로 **로컬 캐시만 사용한 복원 PASS**. 실패한 출력 폴더와 이전 배포본은 삭제하지 않았다.
+
 아래 최신 절만 이번 세션의 실행 증거다. 세부 절차는 RECOVERY-20261022.md 참조.
 
 | 실행 | 결과 |

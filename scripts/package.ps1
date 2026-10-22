@@ -64,7 +64,7 @@ foreach ($entry in $manifest.models) {
 New-Item -ItemType Directory -Force -Path $publishDir | Out-Null
 
 Write-Host "==> Publishing $Configuration / $Runtime (self-contained)"
-$restoreArgs = if ($NoRestore) { @('--no-restore') } else { @() }
+[string[]]$restoreArgs = if ($NoRestore) { @('--no-restore') } else { @() }
 & dotnet publish $project @restoreArgs `
     -c $Configuration `
     -r $Runtime `
@@ -114,6 +114,8 @@ foreach ($name in @(
 
 $buildInfo = @"
 VeilDesk 1.0.0
+Release status: engineering preview; live protection acceptance gates pending
+Source revision: $(& git -C $root rev-parse HEAD)
 Built (UTC): $([DateTime]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ"))
 Configuration: $Configuration
 Runtime: $Runtime (self-contained, win-x64)
