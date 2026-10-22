@@ -1,17 +1,18 @@
 # 현재 상태 — 2026-10-22 복구 세션
 
 기존 작업 체크포인트: `9f0dd2e`. **생산 준비 완료 아님.**
-복구 브랜치: `codex/protection-recovery`. 패키지 전달 경로: `artifacts/VeilDesk-recovery-20261022-final.zip`
+복구 브랜치: `codex/protection-recovery`. 패키지 전달 경로: `artifacts/VeilDesk-recovery-20261022-stabilized.zip`
 (최종 해시는 같은 경로의 `.sha256`, 검증 결과는 `.verification.txt`에서 확인).
 상세 근거와 재현 절차: [RECOVERY-20261022.md](RECOVERY-20261022.md).
 
-- PASS: 기존 26개 + 새 보호 회귀 13개 = 39개 테스트.
+- PASS: 기존 26개 + 새 보호 회귀 16개 = 42개 테스트.
 - PASS: Release 빌드(분석기 비활성화 실행), 0 경고/0 오류.
 - PASS: 실제 VisionPipeline의 추론 정지 중 전체 보호와 Stop 후 늦은 결과 무시.
 - PASS: 전체 보호 불투명 모서리, 실제 로컬 ONNX→추적→해부학적 마스크 픽셀 합성(정적 이미지).
 - PASS: WPF Image Source/Stretch 초기화, 옵션 없는 뷰어/라이브 진입점의 실행 거부.
-- 실제 화면 테스트는 사용자 허용 대기. 이번 세션은 데스크톱 캡처·이미지 뷰어·보호 UI를 자동 실행하지 않았다.
-- M0/M1 PARTIAL, M2 정적 경로 PASS/라이브 NOT RUN. M3–M10 전체 완료를 주장하지 않는다.
+- 사용자 허용 후 실제 엔진 API로 제한 시간 라이브 캡처·검출·오버레이 및 두 번의 Stop을 실행했다. 물리 정렬과 메인 UI/전역키 검증은 남아 있다.
+- 최종 라이브 16개 샘플에서 영역 0개 없음. 119/118 캡처 프레임, fail-closed 중 Stop 2회 후 오버레이 0개. 모든 표시 프레임의 무노출 증거는 아니다.
+- M0/M1 PARTIAL, M2 정적/실제 파이프라인 API 실행 PASS 및 물리 화면 검증 PARTIAL. M3–M10 전체 완료를 주장하지 않는다.
 - 기존 자동 테스트 PID 18800만 식별 종료. Herdr/OpenCode 기록과 세션은 보존.
 
 아래는 **이전 에이전트의 역사 기록**이다. 과거의 23개 테스트, 라이브 실행, 잠긴 세션,

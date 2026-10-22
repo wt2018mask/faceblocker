@@ -34,6 +34,7 @@ public sealed class VisionPipeline : IDisposable
     private readonly bool _ownsModels;
     private readonly SubjectTracker _tracker = new();
     private readonly ConfidenceGate _confidenceGate = new();
+    private readonly CoverageGuard _coverageGuard = new();
     private readonly ProtectionSupervisor _supervisor = new();
     private readonly float[] _nudeInput = new float[3 * FramePreprocessor.NudeNetSize * FramePreprocessor.NudeNetSize];
     private readonly float[] _personInput;
@@ -91,6 +92,7 @@ public sealed class VisionPipeline : IDisposable
         {
             _tracker.Reset();
             _confidenceGate.Reset();
+            _coverageGuard.Reset();
             _consecutiveFailures = 0;
             _lastError = null;
             _lastSegmentationMs = long.MinValue / 2;
@@ -294,12 +296,19 @@ public sealed class VisionPipeline : IDisposable
         lock (_publicationGate)
         {
             _supervisor.ApplySettings(settings);
-            _supervisor.Evaluate(nowMs);
             if (_supervisor.State == ProtectionState.Stopped) return Array.Empty<CensorRegion>();
             var tracks = _tracker.Snapshot();
             _confidenceGate.RetainOnly(tracks.Select(t => t.Id));
-            return CensorComposer.Build(tracks, settings, bounds, nowMs,
-                _supervisor.EffectiveFailClosed(settings), _confidenceGate);
+            var masks = CensorComposer.Build(tracks, settings, bounds, nowMs, false, _confidenceGate);
+            var missingCoverage = _coverageGuard.RequiresCover(tracks.Select(t => t.Id),
+                masks.Where(r => r.TrackId.HasValue).Select(r => r.TrackId!.Value),
+                tracks.Where(t => !t.IsPerson && settings.Detection.EnabledRegions.Contains(t.Region) &&
+                    nowMs - t.LastSeenMs <= settings.Censoring.TrackPersistenceMs).Select(t => t.Id));
+            _supervisor.ReportCoverage(!missingCoverage);
+            _supervisor.Evaluate(nowMs);
+            if (!_supervisor.EffectiveFailClosed(settings)) return masks;
+            return masks.Concat(CensorComposer.Build(Array.Empty<TrackedDetection>(), settings, bounds,
+                nowMs, true)).ToList();
         }
     }
 
@@ -316,6 +325,7 @@ public sealed class VisionPipeline : IDisposable
             _supervisor.Stop();
             _tracker.Reset();
             _confidenceGate.Reset();
+            _coverageGuard.Reset();
             _consecutiveFailures = 0;
             _lastError = null;
             _lastSegmentationMs = long.MinValue / 2;

@@ -18,8 +18,11 @@ $testApp = $null
 $previousRoot = $env:VEILDESK_HOME
 try {
     $env:VEILDESK_HOME = Join-Path (Split-Path -Parent $PSScriptRoot) ('artifacts\interactive-' + [guid]::NewGuid().ToString('N'))
+    New-Item -ItemType Directory -Path $env:VEILDESK_HOME -Force | Out-Null
     $viewerArgs = '-NoProfile -ExecutionPolicy Bypass -STA -File "{0}" -Interactive -ImagePath "{1}" -DurationSeconds {2}' -f $viewerScript, $resolvedImage, $DurationSeconds
-    $viewer = Start-Process powershell -WindowStyle Hidden -ArgumentList $viewerArgs -PassThru
+    $viewer = Start-Process powershell -WindowStyle Hidden -ArgumentList $viewerArgs -PassThru `
+        -RedirectStandardOutput (Join-Path $env:VEILDESK_HOME 'viewer.out.txt') `
+        -RedirectStandardError (Join-Path $env:VEILDESK_HOME 'viewer.err.txt')
     $testApp = Start-Process -FilePath $resolvedApp -PassThru
     Write-Host 'Press Start manually in VeilDesk. Check mask alignment, Stop during fail-closed, and repeated Start/Stop.'
     Write-Host "Bounded test: $DurationSeconds seconds. Ctrl+C closes only the two processes created here."

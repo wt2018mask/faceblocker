@@ -10,6 +10,43 @@ namespace VeilDesk.Core.Tests;
 
 public class ProtectionRegressionTests
 {
+    [Fact]
+    public void LowConfidenceSelectedCandidateCannotReleaseStartupCover()
+    {
+        var guard = new CoverageGuard();
+        Assert.True(guard.RequiresCover(new[] { 1 }, Array.Empty<int>(), new[] { 1 }));
+        Assert.False(guard.RequiresCover(new[] { 1 }, new[] { 1 }, new[] { 1 }));
+        Assert.True(guard.RequiresCover(new[] { 1 }, Array.Empty<int>(), new[] { 1 }));
+        Assert.False(guard.RequiresCover(Array.Empty<int>(), Array.Empty<int>()));
+    }
+    [Fact]
+    public void PreviouslyCoveredTrackCannotDisappearBehindAnotherSubjectsMask()
+    {
+        var guard = new CoverageGuard();
+        Assert.False(guard.RequiresCover(new[] { 1, 2 }, new[] { 1, 2 }));
+        Assert.True(guard.RequiresCover(new[] { 1, 2 }, new[] { 2 }));
+        Assert.True(guard.RequiresCover(new[] { 1, 2 }, Array.Empty<int>()));
+        Assert.False(guard.RequiresCover(new[] { 2 }, new[] { 2 }));
+        guard.Reset();
+        Assert.False(guard.RequiresCover(new[] { 1 }, Array.Empty<int>()));
+    }
+
+    [Fact]
+    public void LostMaskForcesCoverUntilStableCoverageRecovery()
+    {
+        var s = Started();
+        Success(s, 100); Success(s, 1000); s.Evaluate(1000);
+        s.ReportCoverage(false);
+        Assert.Equal(ProtectionState.FailClosed, s.Evaluate(1100));
+        Success(s, 2000); s.ReportCoverage(false);
+        Assert.Equal(ProtectionState.FailClosed, s.Evaluate(2100));
+        s.ReportCoverage(true);
+        Success(s, 2200);
+        Assert.Equal(ProtectionState.FailClosed, s.Evaluate(2200));
+        Success(s, 2300);
+        Assert.Equal(ProtectionState.Protecting, s.Evaluate(2300));
+    }
+
     private static ProtectionSupervisor Started()
     {
         var supervisor = new ProtectionSupervisor();

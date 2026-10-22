@@ -307,8 +307,8 @@ public sealed class VeilDeskEngine : IAsyncDisposable
         foreach (var runner in _runners)
         {
             var regions = runner.Pipeline.GetRegions(_settings, runner.Monitor.LocalBounds, now);
-            runner.LastRegionCount = regions.Count;
-            runner.LastFailClosed = runner.Pipeline.FailClosedActive(_settings, now);
+            Volatile.Write(ref runner.RenderState,
+                new RenderStatus(regions.Count, regions.Any(r => r.Kind == CensorRegionKind.FailClosed)));
             var snapshot = Volatile.Read(ref runner.Snapshot);
             _overlay.Render(runner.Monitor.Id, regions, _settings, snapshot);
         }
@@ -441,8 +441,6 @@ public sealed class VeilDeskEngine : IAsyncDisposable
         var result = runner.Pipeline.Analyze(frame, c, now);
         if (snapshot is not null) Volatile.Write(ref runner.Snapshot, snapshot);
         var detectionEvents = result.NudeDetections.Count + result.PersonDetections.Count;
-        runner.LastRegionCount = result.Regions.Count;
-        runner.LastFailClosed = runner.Pipeline.FailClosedActive(c, now);
         runner.LastTracks = result.Tracks.Count;
         return new FrameOutcome(true, result.TotalMs, result.Tracks.Count, detectionEvents,
             result.Error, delta);
@@ -504,6 +502,7 @@ public sealed class VeilDeskEngine : IAsyncDisposable
         {
             capture.TryGetValue(runner.Monitor.Id, out var cap);
             var latency = runner.Latency.Snapshot();
+            var render = Volatile.Read(ref runner.RenderState);
             var elapsed = _startedAt is { } start
                 ? Math.Max(0.001, (DateTimeOffset.Now - start).TotalSeconds)
                 : 1.0;
@@ -520,9 +519,9 @@ public sealed class VeilDeskEngine : IAsyncDisposable
                 latency.P50Ms,
                 latency.P95Ms,
                 (int)runner.LastTracks,
-                runner.LastRegionCount,
+                render.Regions,
                 Interlocked.Read(ref runner.DetectionEvents),
-                runner.LastFailClosed,
+                render.FailClosed,
                 cap?.LastFrameUtc,
                 Volatile.Read(ref runner.Error),
                 cap?.Error));
@@ -598,8 +597,7 @@ public sealed class VeilDeskEngine : IAsyncDisposable
         public long LastSnapshotMs;
         public long LastTracks;
         public long DetectionEvents;
-        public int LastRegionCount;
-        public bool LastFailClosed;
+        public RenderStatus RenderState = new(0, true);
         public string? Error;
         public BitmapSource? Snapshot;
 
@@ -607,6 +605,8 @@ public sealed class VeilDeskEngine : IAsyncDisposable
         {
         }
     }
+
+    private sealed record RenderStatus(int Regions, bool FailClosed);
 
     private readonly record struct FrameOutcome(
         bool Analyzed, double AnalysisMs, int TrackCount, int Detections, string? Error, double Delta)

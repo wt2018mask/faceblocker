@@ -56,6 +56,7 @@ public sealed class ProtectionSupervisor
     private int _consecutiveSuccesses;
     private string? _lastError;
     private bool _captureFailed;
+    private bool _coverageFailed;
     private string? _captureError;
 
     private int _failClosedAfterMs = 1500;
@@ -159,6 +160,7 @@ public sealed class ProtectionSupervisor
             _consecutiveSuccesses = 0;
             _lastError = null;
             _captureFailed = false;
+            _coverageFailed = false;
             _captureError = null;
         }
         Raise(previous, ProtectionState.FailClosed, "protection started");
@@ -249,6 +251,15 @@ public sealed class ProtectionSupervisor
         }
     }
 
+    public void ReportCoverage(bool sufficient)
+    {
+        lock (_gate)
+        {
+            _coverageFailed = !sufficient;
+            if (!sufficient) _consecutiveSuccesses = 0;
+        }
+    }
+
     /// <summary>
     /// Recomputes the protection state. Must be called before the overlay is
     /// built, because the result decides whether the whole output is covered.
@@ -280,10 +291,10 @@ public sealed class ProtectionSupervisor
                     current = ProtectionState.FailClosed;
                     reason = $"no successful analysis for {nowMs - _lastSuccessMs} ms";
                 }
-                else if (_captureFailed || frameStale)
+                else if (_captureFailed || frameStale || _coverageFailed)
                 {
                     current = ProtectionState.FailClosed;
-                    reason = "capture unavailable or stale";
+                    reason = _coverageFailed ? "previously censored track lost its mask" : "capture unavailable or stale";
                 }
                 else
                 {
@@ -293,7 +304,7 @@ public sealed class ProtectionSupervisor
             }
             else
             {
-                var healthy = !neverTrusted && !evidenceStale && !_captureFailed && !frameStale;
+                var healthy = !neverTrusted && !evidenceStale && !_captureFailed && !frameStale && !_coverageFailed;
                 var dwellElapsed = _failClosedSinceMs >= 0 && (nowMs - _failClosedSinceMs) >= _minPausedMs;
                 var enoughPasses = _consecutiveSuccesses >= _recoveryPasses;
                 if (healthy && dwellElapsed && enoughPasses)
@@ -343,6 +354,7 @@ public sealed class ProtectionSupervisor
 
     private void Raise(ProtectionState previous, ProtectionState current, string? reason)
     {
+        if (previous == current) return;
         try
         {
             StateChanged?.Invoke(previous, current, reason);

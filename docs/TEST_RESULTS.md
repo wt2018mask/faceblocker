@@ -1,8 +1,19 @@
 # 최신 실행 결과 — 2026-10-22 복구 세션
 
+사용자 허용 후 `tools/LivePipelineProbe`로 실제 WGC→ONNX→추적→오버레이를 실행했다.
+최종 실행 PASS(exit 0): 두 번의 8초 구간, 캡처 119/118프레임, 분석 15/16회,
+실제 검출 상태에서 부분 마스크가 보장된 샘플 6개. 전체 16개 샘플은 부분 마스크 또는 fail-closed
+보호 영역이 존재했다. 두 구간 모두 캡처 제외 True, 오버레이 창 1개, 처리 오류 False였다.
+각 구간은 fail-closed 상태에서 Stop해 running=False/오버레이 0개가 됐다. 종료 후 관련 프로세스가 없었다.
+1초 샘플링이므로 모든 표시 프레임의 무노출을 입증하지 않는다.
+첫 실행에서 이동 중 마스크 0개/트랙 유지가 재현되어 FAIL로 기록하고 CoverageGuard로 보완했다.
+보완 후 42/42 headless PASS. 중간 테스트의 세션간 assertion 재사용 오류도 수정했다.
+최신 실제 실행의 모든 샘플은 `artifacts/live-pipeline-finalcheck.log`에 보존한다.
+메인 UI 자동 클릭은 geometry 오류로 FAIL, 직접 엔진 API 실행과 구분한다.
+
 패키징 PASS: x64 self-contained publish, 4개 모델 SHA-256 확인, 내부 SHA256SUMS와 ZIP 외부 해시 생성.
 첫 preview 폴더는 약 238.2 MB / ZIP 110.5 MB였으며 이후 F12→F10 수정으로 대체된다.
-최종 사용자 전달 경로는 `artifacts/VeilDesk-recovery-20261022-final/` 및 동일 이름의 `.zip`, `.zip.sha256`다.
+최종 사용자 전달 경로는 `artifacts/VeilDesk-recovery-20261022-stabilized/` 및 동일 이름의 `.zip`, `.zip.sha256`다.
 패키지 앱 실행/설치와 실제 비상키는 NOT RUN이며 final ZIP의 무결성 검증 결과는 외부 verification 파일로 남긴다.
 전체 분석기를 켠 publish는 기존 CA 스타일/성능/PInvoke 경고를 출력한다. 0경고 기록은 분석기를 끈 headless 빌드에 한정한다.
 
@@ -17,15 +28,17 @@
 |---|---|
 | 최초 격리 환경 dotnet test | FAIL: testhost IPC 연결이 90초 후 중단. 테스트 assertion 실패와 구분한다. |
 | 로컬 기존 테스트 재실행 | PASS 26/26 |
-| `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Test-Headless.ps1` | PASS: 39/39, Release 0 오류/0 경고(`RunAnalyzers=false`), 보호 프로브, WPF Image 초기화 |
+| `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Test-Headless.ps1` | PASS: 42/42, Release 0 오류/0 경고(`RunAnalyzers=false`), 보호 프로브, WPF Image 초기화 |
 | `dotnet run --project tools/ProtectionProbe/ProtectionProbe.csproj -c Release --no-build -- models artifacts/live-test/david.jpg` | PASS: 실제 CPU ONNX 검출→추적→해부학적 마스크→픽셀 합성. 사람 1, 해부학적 검출 9, 검열 영역 2, 변경 픽셀 128,082 |
 | 추론 정지 중 보호 판정 및 Stop | PASS: 생산 VisionPipeline에 제어 가능한 모델 주입. 판정 4.54 ms, 전체 보호 영역 존재, Stop 후 영역 0, 늦은 완료 후에도 영역 0 |
 | 전체 보호 렌더러 | PASS: 음수 모니터 원점, 150% DPI 기술값, CornerRadius=100, Opacity=0.1에서 모서리 불투명 픽셀 확인. 실제 창 검증과 구분 |
 | 옵션 없는 로컬 legacy viewer/run-live 호출 | PASS: 명시적 opt-in 요구 오류로 종료, 창 생성 경로에 진입하지 않음 |
-| 실제 Ctrl+C, 전역 비상키, 엔진 Start/Stop 창 수명 | NOT RUN: 사용자 참여 대화형 검증 필요 |
-| 현재 데스크톱 검출→실제 오버레이·녹화·복수 모니터 | NOT RUN |
+| 실제 Ctrl+C, 전역 비상키, 메인 UI 버튼 수명 | NOT RUN |
+| 직접 엔진 API Start/Stop 및 fail-closed 중 Stop | PASS: 실제 오버레이 창 1→0 두 번, 프로세스 잔존 없음 |
+| 현재 데스크톱 검출→오버레이 창 및 캡처 제외 | PASS: 숫자·상태·창 수명. 물리 픽셀 정렬 PARTIAL |
+| 실제 녹화·복수 물리 모니터 | NOT RUN |
 
-새 회귀 13개는 복구 dwell, 중복 성공, 지연 추론, 캡처 누락, 결과 순서, 실패 교대,
+새 회귀 16개는 복구 dwell, 중복 성공, 지연 추론, 캡처 누락, 결과 순서, 실패 교대,
 캡처 복구, 100회 상태 Start/Stop, confidence hysteresis, 불변 스냅샷,
 트랙 누락/회복, 두 합성 디스플레이 좌표 경우를 검사한다. 상태 Start/Stop 테스트는 실제 창 테스트가 아니다.
 화면 캡처나 테스트 미디어를 외부로 전송하지 않았다.
