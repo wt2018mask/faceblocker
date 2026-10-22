@@ -30,6 +30,7 @@ public sealed class VisionPipeline : IDisposable
 {
     private readonly VisionPipelineOptions _options;
     private readonly VisionModels _models;
+    private readonly bool _ownsModels;
     private readonly SubjectTracker _tracker = new();
     private readonly float[] _nudeInput = new float[3 * FramePreprocessor.NudeNetSize * FramePreprocessor.NudeNetSize];
     private readonly float[] _personInput;
@@ -37,14 +38,31 @@ public sealed class VisionPipeline : IDisposable
     private readonly object _gate = new();
 
     private long _lastSegmentationMs = long.MinValue / 2;
+    private long _lastBodyMs = long.MinValue / 2;
+    private IReadOnlyList<Detection> _lastBodyDetections = Array.Empty<Detection>();
     private long _lastSuccessMs = -1;
     private int _consecutiveFailures;
     private string? _lastError;
 
     public VisionPipeline(VisionPipelineOptions options)
+        : this(options, VisionModels.Load(options), ownsModels: true)
+    {
+    }
+
+    /// <summary>
+    /// Uses a model set shared by several monitor pipelines. The caller owns
+    /// <paramref name="models"/> and must outlive every pipeline using it.
+    /// </summary>
+    public VisionPipeline(VisionPipelineOptions options, VisionModels models)
+        : this(options, models, ownsModels: false)
+    {
+    }
+
+    private VisionPipeline(VisionPipelineOptions options, VisionModels models, bool ownsModels)
     {
         _options = options;
-        _models = VisionModels.Load(options);
+        _models = models;
+        _ownsModels = ownsModels;
         _personInput = new float[3 * options.PersonModelSize * options.PersonModelSize];
     }
 
@@ -77,20 +95,34 @@ public sealed class VisionPipeline : IDisposable
                     personOutput, 4 + 80, AnchorCount(personSize), 0, personTransform,
                     settings.Detection.PersonConfidence, settings.Detection.NmsIou);
 
-                sw.Restart();
-                FramePreprocessor.PreprocessNudeNet(frame, _nudeInput);
-                preprocessMs += sw.Elapsed.TotalMilliseconds;
+                IReadOnlyList<Detection> body;
+                var bodyDue = nowMs - _lastBodyMs >=
+                    1000.0 / Math.Clamp(settings.Performance.BodyScanRateHz, 1, 30);
+                if (bodyDue)
+                {
+                    sw.Restart();
+                    FramePreprocessor.PreprocessNudeNet(frame, _nudeInput);
+                    preprocessMs += sw.Elapsed.TotalMilliseconds;
 
-                sw.Restart();
-                var nudeOutput = _models.RunNudeNet(_nudeInput, FramePreprocessor.NudeNetSize);
-                nudeMs = sw.Elapsed.TotalMilliseconds;
+                    sw.Restart();
+                    var nudeOutput = _models.RunNudeNet(_nudeInput, FramePreprocessor.NudeNetSize);
+                    nudeMs = sw.Elapsed.TotalMilliseconds;
 
-                var nudeTransform = LetterboxTransform.CreateBottomRight(
-                    frame.Width, frame.Height, FramePreprocessor.NudeNetSize);
-                var body = DetectionDecoder.DecodeNudeNet(
-                    nudeOutput, 22, 2100, nudeTransform,
-                    confidenceThreshold: 0.20,
-                    nmsIou: settings.Detection.NmsIou);
+                    var nudeTransform = LetterboxTransform.CreateBottomRight(
+                        frame.Width, frame.Height, FramePreprocessor.NudeNetSize);
+                    body = DetectionDecoder.DecodeNudeNet(
+                        nudeOutput, 22, 2100, nudeTransform,
+                        confidenceThreshold: 0.20,
+                        nmsIou: settings.Detection.NmsIou);
+                    _lastBodyDetections = body;
+                    _lastBodyMs = nowMs;
+                }
+                else
+                {
+                    // Body detections are only needed on their own cadence. Between
+                    // scans the tracker extrapolates the last boxes.
+                    body = Array.Empty<Detection>();
+                }
 
                 var peopleWithMasks = people;
                 if (settings.Censoring.Style == CensorStyle.Silhouette &&
@@ -116,7 +148,7 @@ public sealed class VisionPipeline : IDisposable
                 var regions = CensorComposer.Build(tracks, settings, frame.MonitorBounds, nowMs,
                     FailClosedActive(settings, nowMs));
 
-                return new AnalysisResult(body, peopleWithMasks, tracks, regions,
+                return new AnalysisResult(_lastBodyDetections, peopleWithMasks, tracks, regions,
                     preprocessMs, personMs, nudeMs, segmentMs, total.Elapsed.TotalMilliseconds,
                     segmentationRan, null);
             }
@@ -202,8 +234,13 @@ public sealed class VisionPipeline : IDisposable
             _consecutiveFailures = 0;
             _lastError = null;
             _lastSegmentationMs = long.MinValue / 2;
+            _lastBodyMs = long.MinValue / 2;
+            _lastBodyDetections = Array.Empty<Detection>();
         }
     }
 
-    public void Dispose() => _models.Dispose();
+    public void Dispose()
+    {
+        if (_ownsModels) _models.Dispose();
+    }
 }

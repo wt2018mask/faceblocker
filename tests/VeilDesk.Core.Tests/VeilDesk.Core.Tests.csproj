@@ -24,4 +24,10 @@
     <ProjectReference Include="..\..\src\VeilDesk.Core\VeilDesk.Core.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Content Include="..\..\builtin-packs\*.veilpack"
+             Link="builtin-packs\%(Filename)%(Extension)"
+             CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

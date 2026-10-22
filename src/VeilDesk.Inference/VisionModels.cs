@@ -39,6 +39,7 @@ public sealed class VisionModels : IDisposable
     private readonly string _personInput;
     private readonly string _segmentationInput;
     private readonly string _outputName;
+    private readonly object _runGate = new();
 
     private VisionModels(
         InferenceSession nude,
@@ -135,12 +136,18 @@ public sealed class VisionModels : IDisposable
             input, FramePreprocessor.SegmentationSize);
     }
 
-    private static float[] Run(InferenceSession session, string inputName, string outputName,
+    private float[] Run(InferenceSession session, string inputName, string outputName,
         float[] input, int size)
     {
-        var tensor = new DenseTensor<float>(input, new[] { 1, 3, size, size });
-        using var results = session.Run(new[] { NamedOnnxValue.CreateFromTensor(inputName, tensor) });
-        return results.First(r => r.Name == outputName).AsTensor<float>().ToArray();
+        // A shared model set is used by one pipeline per monitor. ONNX Runtime
+        // allows concurrent Run calls, but serialising avoids oversubscribing
+        // the same CPU/iGPU and keeps latency predictable on laptops.
+        lock (_runGate)
+        {
+            var tensor = new DenseTensor<float>(input, new[] { 1, 3, size, size });
+            using var results = session.Run(new[] { NamedOnnxValue.CreateFromTensor(inputName, tensor) });
+            return results.First(r => r.Name == outputName).AsTensor<float>().ToArray();
+        }
     }
 
     public void Dispose()

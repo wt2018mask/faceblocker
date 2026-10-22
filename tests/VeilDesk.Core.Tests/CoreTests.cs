@@ -1,5 +1,9 @@
+using System.Buffers.Binary;
+using System.Text;
+using System.Text.Json;
 using VeilDesk.Core.Censoring;
 using VeilDesk.Core.Detection;
+using VeilDesk.Core.Export;
 using VeilDesk.Core.Geometry;
 using VeilDesk.Core.Packs;
 using VeilDesk.Core.Sessions;
@@ -353,6 +357,138 @@ public class PackTests
         Assert.False(result.Success);
         Assert.Contains("Unsupported", result.Error);
         File.Delete(path);
+    }
+}
+
+public class AviWriterTests
+{
+    [Fact]
+    public void MjpegAvi_WritesValidStreamingContainerAndIndex()
+    {
+        var path = System.IO.Path.Combine(System.IO.Path.GetTempPath(),
+            "veildesk-" + Guid.NewGuid().ToString("N") + ".avi");
+        var frames = new[]
+        {
+            new byte[] { 0xFF, 0xD8, 0x01, 0x02, 0xFF, 0xD9 },
+            new byte[] { 0xFF, 0xD8, 0x03, 0x04, 0x05, 0x06, 0x07, 0xFF, 0xD9 },
+            new byte[] { 0xFF, 0xD8, 0x08, 0xFF, 0xD9 }
+        };
+
+        using (var writer = new MjpegAviWriter(path, 640, 360, 15))
+        {
+            Assert.Equal(path, writer.OutPath);
+            foreach (var frame in frames) writer.WriteFrame(frame);
+            Assert.Equal(3, writer.FrameCount);
+            writer.Finish();
+            writer.Finish(); // idempotent
+        }
+
+        var data = File.ReadAllBytes(path);
+        Assert.Equal("RIFF", Ascii(data, 0));
+        Assert.Equal((uint)(data.Length - 8), ReadU32(data, 4));
+        Assert.Equal("AVI ", Ascii(data, 8));
+        Assert.Equal("LIST", Ascii(data, 12));
+        Assert.Equal("hdrl", Ascii(data, 20));
+
+        var avih = 24;
+        Assert.Equal("avih", Ascii(data, avih));
+        Assert.Equal(56u, ReadU32(data, avih + 4));
+        Assert.Equal(3u, ReadU32(data, avih + 8 + 16)); // total frames
+        Assert.Equal(640u, ReadU32(data, avih + 8 + 32));
+        Assert.Equal(360u, ReadU32(data, avih + 8 + 36));
+
+        var hdrlSize = ReadU32(data, 16);
+        var moviList = 20 + (int)hdrlSize;
+        Assert.Equal("LIST", Ascii(data, moviList));
+        var moviSize = ReadU32(data, moviList + 4);
+        Assert.Equal("movi", Ascii(data, moviList + 8));
+
+        var moviFourCc = moviList + 8;
+        // LIST size must include the four-byte 'movi' FOURCC, not just frames.
+        var expectedMoviSize = 4 + frames.Sum(f => 8 + f.Length + (f.Length & 1));
+        Assert.Equal((uint)expectedMoviSize, moviSize);
+        var idx = moviList + 8 + (int)moviSize;
+        Assert.Equal("idx1", Ascii(data, idx));
+        Assert.Equal((uint)(frames.Length * 16), ReadU32(data, idx + 4));
+
+        var entry = idx + 8;
+        long expectedChunk = moviList + 12;
+        for (var i = 0; i < frames.Length; i++, entry += 16)
+        {
+            Assert.Equal("00dc", Ascii(data, entry));
+            Assert.Equal(0x10u, ReadU32(data, entry + 4));
+            var offset = ReadU32(data, entry + 8);
+            var size = ReadU32(data, entry + 12);
+            Assert.Equal((uint)frames[i].Length, size);
+            Assert.Equal(expectedChunk, (long)moviFourCc + offset);
+            Assert.Equal("00dc", Ascii(data, (int)(moviFourCc + offset)));
+            Assert.Equal(frames[i], data.AsSpan((int)(moviFourCc + offset + 8), (int)size).ToArray());
+            expectedChunk += 8 + size + (size & 1);
+        }
+        Assert.Equal(idx, (int)expectedChunk);
+        Assert.Equal(0u, data.Length & 1u);
+
+        File.Delete(path);
+    }
+
+    [Fact]
+    public void MjpegAvi_RejectsInvalidArgumentsAndEmptyFrames()
+    {
+        var path = System.IO.Path.Combine(System.IO.Path.GetTempPath(),
+            "veildesk-" + Guid.NewGuid().ToString("N") + ".avi");
+        Assert.Throws<ArgumentOutOfRangeException>(() => new MjpegAviWriter(path, 0, 10, 15));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new MjpegAviWriter(path, 10, 10, 0));
+        using (var writer = new MjpegAviWriter(path, 10, 10, 15))
+        {
+            Assert.Throws<ArgumentException>(() => writer.WriteFrame(ReadOnlySpan<byte>.Empty));
+        }
+        File.Delete(path);
+    }
+
+    private static string Ascii(byte[] data, int offset)
+        => Encoding.ASCII.GetString(data, offset, 4);
+
+    private static uint ReadU32(byte[] data, int offset)
+        => BinaryPrimitives.ReadUInt32LittleEndian(data.AsSpan(offset, 4));
+}
+
+public class BuiltInPackTests
+{
+    [Fact]
+    public void BuiltInPacks_AreValidAndCarryCensoringPresets()
+    {
+        var directory = System.IO.Path.Combine(AppContext.BaseDirectory, "builtin-packs");
+        Assert.True(Directory.Exists(directory), "Built-in packs were not copied to the test output.");
+        var files = Directory.GetFiles(directory, "*.veilpack");
+        Assert.True(files.Length >= 4, "Expected at least four built-in packs.");
+
+        foreach (var file in files)
+        {
+            var destination = System.IO.Path.Combine(System.IO.Path.GetTempPath(),
+                "veildesk-builtin-check-" + Guid.NewGuid().ToString("N")[..10]);
+            try
+            {
+                var result = PackValidator.ValidateAndExtract(file, destination);
+                Assert.True(result.Success, System.IO.Path.GetFileName(file) + ": " + result.Error);
+                var manifest = result.Manifest!;
+                Assert.Equal(PackFormat.Current, manifest.Format);
+                Assert.StartsWith("builtin.", manifest.Id);
+                Assert.True(manifest.SettingsPreset!.ContainsKey("Censoring"));
+
+                var preset = JsonSerializer.Deserialize<CensorSettings>(
+                    manifest.SettingsPreset["Censoring"].GetRawText(), SettingsStore.JsonOptions);
+                Assert.NotNull(preset);
+                Assert.NotEmpty(preset.Color);
+
+                foreach (var asset in manifest.Assets)
+                    Assert.True(File.Exists(System.IO.Path.Combine(destination, asset.Path)),
+                        "Missing extracted asset: " + asset.Path);
+            }
+            finally
+            {
+                if (Directory.Exists(destination)) Directory.Delete(destination, true);
+            }
+        }
     }
 }
 

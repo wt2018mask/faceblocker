@@ -12,7 +12,7 @@ namespace VeilDesk.Core.Vision;
 public sealed class VideoFrame : IDisposable
 {
     private byte[]? _pixels;
-    private int _disposed;
+    private int _refCount = 1;
 
     private VideoFrame(
         byte[] pixels,
@@ -48,6 +48,18 @@ public sealed class VideoFrame : IDisposable
 
     public byte[] Pixels => Volatile.Read(ref _pixels)
         ?? throw new ObjectDisposedException(nameof(VideoFrame));
+
+    /// <summary>
+    /// Adds a reference so a capture session can keep the freshest frame alive
+    /// while it is also published to the analysis mailbox. Every successful
+    /// Retain must be paired with Dispose. Not safe to race against the final
+    /// Dispose; the capture layer retains before dropping its own reference.
+    /// </summary>
+    public void Retain()
+    {
+        if (Volatile.Read(ref _pixels) is null) throw new ObjectDisposedException(nameof(VideoFrame));
+        Interlocked.Increment(ref _refCount);
+    }
 
     public ReadOnlySpan<byte> Span
     {
@@ -86,7 +98,7 @@ public sealed class VideoFrame : IDisposable
 
     public void Dispose()
     {
-        if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+        if (Interlocked.Decrement(ref _refCount) != 0) return;
         var pixels = Interlocked.Exchange(ref _pixels, null);
         if (pixels is not null) ArrayPool<byte>.Shared.Return(pixels);
     }

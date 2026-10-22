@@ -21,6 +21,7 @@ exports/
 recordings/
 packs/local/
 *.veilpack
+!builtin-packs/*.veilpack
 *.log
 
 # Large model weights are fetched reproducibly by scripts/fetch-models.ps1

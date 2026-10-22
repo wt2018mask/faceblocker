@@ -75,10 +75,11 @@ public sealed class PerformanceSettings
 {
     public PerformancePreset Preset { get; set; } = PerformancePreset.Balanced;
     public int ScanRateHz { get; set; } = 12;
+    public int BodyScanRateHz { get; set; } = 6;
     public bool AdaptiveScanning { get; set; } = true;
     public double StaticSceneThreshold { get; set; } = 0.004;
     public int SegmentationRateHz { get; set; } = 4;
-    public bool UseDirectML { get; set; } = true;
+    public bool UseDirectML { get; set; }
     public int OverlayFps { get; set; } = 60;
     public int OverlaySourceWidth { get; set; } = 1280;
     public int MaxSegmentationsPerFrame { get; set; } = 2;
@@ -172,6 +173,7 @@ public static class SettingsValidator
 
         var p = settings.Performance;
         p.ScanRateHz = Math.Clamp(p.ScanRateHz, 1, 60);
+        p.BodyScanRateHz = Math.Clamp(p.BodyScanRateHz, 1, 30);
         p.StaticSceneThreshold = Math.Clamp(p.StaticSceneThreshold, 0.0001, 0.25);
         p.SegmentationRateHz = Math.Clamp(p.SegmentationRateHz, 1, 30);
         p.OverlayFps = Math.Clamp(p.OverlayFps, 15, 144);
