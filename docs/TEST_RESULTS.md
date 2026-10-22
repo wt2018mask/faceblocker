@@ -246,7 +246,7 @@ Executed from the app with censorship compositing enabled.
 Output:
 
 ```
-C:\Users\wt201\OneDrive\Pictures\VeilDesk\VeilDesk-20261022-101512-Generic-PnP-Monitor.png
+C:\Users\<you>\Pictures\VeilDesk\VeilDesk-20261022-101512-Generic-PnP-Monitor.png
 ```
 
 The file is 202,240 bytes, is a real WGC frame of the desktop, and was written
@@ -286,7 +286,7 @@ Command:
 
 ```powershell
 dotnet run --project tools/AviProbe/AviProbe.csproj -- `
-  "C:\Users\wt201\OneDrive\Pictures\VeilDesk\VeilDesk-20261022-101512-Generic-PnP-Monitor.png" `
+  "C:\Users\<you>\Pictures\VeilDesk\VeilDesk-20261022-101512-Generic-PnP-Monitor.png" `
   "artifacts\avi-probe\veildesk-avi-probe.avi"
 ```
 

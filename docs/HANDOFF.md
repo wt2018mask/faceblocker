@@ -136,7 +136,7 @@ soak 실행 중 동일 프로브 출력 디렉터리에 빌드하면 Windows DLL
 # Historical handoff and resume guide
 
 **Snapshot:** 2026-10-22 (Asia/Seoul)
-**Project root:** `C:\Users\wt201\OneDrive\Desktop\blocker`
+**Project root:** `C:\Users\<you>\source\faceblocker`
 **Product:** VeilDesk 1.0.0, Windows 10/11 x64, .NET 8 + WPF
 
 This document is for the next developer or agent continuing the work. Read
@@ -293,7 +293,7 @@ With a detection active, use **Export → Save censored screenshot**. Confirm:
 Reference output from the earlier run:
 
 ```
-C:\Users\wt201\OneDrive\Pictures\VeilDesk\VeilDesk-20261022-101512-Generic-PnP-Monitor.png
+C:\Users\<you>\Pictures\VeilDesk\VeilDesk-20261022-101512-Generic-PnP-Monitor.png
 ```
 
 `MyPictures` is redirected to OneDrive on the reference machine. That earlier

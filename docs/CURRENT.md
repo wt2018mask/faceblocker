@@ -102,7 +102,7 @@
 # Historical snapshot
 
 **Snapshot:** 2026-10-22 (Asia/Seoul)
-**Project root:** `C:\Users\wt201\OneDrive\Desktop\blocker`
+**Project root:** `C:\Users\<you>\source\faceblocker`
 **Version:** 1.0.0
 **Platform:** Windows 10/11 x64, .NET 8, WPF
 
@@ -188,7 +188,7 @@ settings UI, tests, measured performance, and reproducible packaging.
   overlay running and excluded from capture; Start/Stop worked.
 - **Live session log:** 97.1 s, 103 detection events, peak 11 tracks.
 - **Screenshot export path:** real WGC frame written to
-  `C:\Users\wt201\OneDrive\Pictures\VeilDesk\VeilDesk-20261022-101512-Generic-PnP-Monitor.png`.
+  `C:\Users\<you>\Pictures\VeilDesk\VeilDesk-20261022-101512-Generic-PnP-Monitor.png`.
   Visual inspection showed no censor region, so this file proves capture +
   PNG encoding, not compositing during a live detection.
 - **Screenshot censor compositing:** `tools/ExportProbe` passed with a

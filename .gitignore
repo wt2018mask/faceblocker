@@ -1,21 +1,48 @@
+# Credentials, keys and local configuration
+.env
+.env.*
+!.env.example
+!.env.sample
+*.pem
+*.p12
+*.pfx
+*.key
+*.keystore
+id_rsa
+id_rsa.*
+*credentials*.json
+*secrets*.json
+
 # Build output
 bin/
 obj/
 publish/
+dist/
+build/
+out/
+release/
 artifacts/
 *.user
 *.suo
 
 # Tooling and local caches
 .venv/
+venv/
+env/
 .vs/
+.vscode/
+.idea/
 tools/ffmpeg/
 tools/models-cache/
 tools/__pycache__/
 __pycache__/
+.pytest_cache/
 TestResults/
 *.trx
 coverage/
+.cache/
+tmp/
+temp/
 
 # User data never belongs in the repository
 sessions/
@@ -25,6 +52,9 @@ packs/local/
 *.veilpack
 !builtin-packs/*.veilpack
 *.log
+*.sqlite
+*.sqlite3
+*.db
 
 # Large model weights are fetched reproducibly by scripts/fetch-models.ps1
 models/*.onnx
@@ -37,3 +67,4 @@ models/*.bin
 # OS
 Thumbs.db
 desktop.ini
+.DS_Store
