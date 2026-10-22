@@ -1,4 +1,24 @@
-# 현재 상태 — 2026-10-22 복구 세션
+# 현재 상태 — M1–M2 후속 검증 (2026-10-22)
+
+브랜치 `codex/protection-recovery`, 기준 `952380a` 이후 작업.
+자세한 근거: [ACCEPTANCE-20261022.md](ACCEPTANCE-20261022.md).
+
+- **VERIFIED:** 실제 검출 마스크의 WPF→물리 좌표 오차 최대0.484px(단일 2560×1600/150% DPI), 네이티브 창 bounds 일치.
+- **VERIFIED:** 제어된 실제 엔진 초기화 중 취소, 로드 완료 전 덮개 제거, 2회 Start/Stop 후 overlay0.
+- **VERIFIED:** Core42/42, Release 빌드, 1000회 세그멘테이션 캐시 교체, 녹화의 동시 Stop/4초 초과 작업 수명 회귀.
+- **VERIFIED:** 실제 정적 ONNX 마스크2개가 PNG와 디코딩 AVI24프레임에 포함됨(데스크톱 녹화와 구분).
+- **VERIFIED:** 화면 없는 300.1초 실제 모델/추적/합성 soak2521회/252합성. post-warmup private −2.7MiB, handles−14.
+- **PARTIAL:** 기존952380a UI의 실제 Start와 Ctrl+Shift+F10은 실행. 수정된 UI의 Cancel/Stop 버튼, 다른 창 포커스 비상키는 미완료.
+- **PARTIAL:** 실제 표시 픽셀의 육안/프레임별 가림, 장시간 데스크톱 보호, 움직이는 실제 캡처의 내보내기.
+- **BLOCKED:** 물리 복수 모니터(연결 화면1개). 기존 합성 좌표 회귀와 구분.
+
+원인 없는 최적화는 하지 않았다. UI75초 자원 수치에는 초기화/입력 자동화가 포함되며, 별도 idle CPU 프로파일링이 필요하다.
+기존 ZIP은952380a이며 이번 소스 변경을 포함하지 않는다. M1–M2 전체 게이트는 PARTIAL, M10은 진행하지 않았다.
+다음은 사용자 입회 하의 Cancel/Stop/다른 창 포커스 비상키와 실제 가림 확인이다.
+
+아래는 이전 복구 세션의 역사 기록이다.
+
+# 이전 상태 — 2026-10-22 복구 세션
 
 기존 작업 체크포인트: `9f0dd2e`. **생산 준비 완료 아님.**
 복구 브랜치: `codex/protection-recovery`. 패키지 전달 경로: `artifacts/VeilDesk-recovery-20261022-stabilized.zip`

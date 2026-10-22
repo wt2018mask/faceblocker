@@ -55,6 +55,7 @@ public partial class MainWindow : Window
     private IReadOnlyList<MonitorDescriptor> _monitors = Array.Empty<MonitorDescriptor>();
     private bool _uiReady;
     private bool _starting;
+    private bool _stopping;
     private bool _allowClose;
     private bool _closingStarted;
     private bool _saving;
@@ -506,7 +507,12 @@ public partial class MainWindow : Window
 
     private async void StartStop_Click(object sender, RoutedEventArgs e)
     {
-        if (_starting) return;
+        if (_stopping) return;
+        if (_starting)
+        {
+            await StopProtectionAsync();
+            return;
+        }
         if (!_engine.IsRunning && !_emergencyStopAvailable)
         {
             MessageBox.Show(this, "Ctrl+Shift+F10 emergency stop could not be registered. Close the other app using this shortcut, then restart VeilDesk.",
@@ -535,7 +541,7 @@ public partial class MainWindow : Window
         }
 
         _starting = true;
-        SetStartButtons(false, "Loading models…");
+        SetStartButtons(true, "Cancel initialization");
         StateText.Text = "Loading models";
         HeroEyebrow.Text = "STARTING";
         HeroTitle.Text = "Loading local models and capture…";
@@ -551,6 +557,14 @@ public partial class MainWindow : Window
             HeroBody.Text = "Captured frames are analysed locally; overlays are click-through and excluded from capture. Stop protection at any time.";
             RefreshExportMonitors();
         }
+        catch (OperationCanceledException)
+        {
+            AppLog.Write("protection-start-cancelled", "user cancelled initialization");
+            StateText.Text = "Idle";
+            HeroEyebrow.Text = "PROTECTION OFF";
+            HeroTitle.Text = "Protection initialization cancelled.";
+            HeroBody.Text = "Nothing is being captured. Start again when ready.";
+        }
         catch (Exception ex)
         {
             AppLog.WriteException("protection-start-failed", ex);
@@ -564,43 +578,53 @@ public partial class MainWindow : Window
         finally
         {
             _starting = false;
-            SetStartButtons(true, _engine.IsRunning ? "Stop protection" : "Start protection");
+            if (!_stopping) SetStartButtons(true, _engine.IsRunning ? "Stop protection" : "Start protection");
             UpdateStatus();
         }
     }
 
     private async Task StopProtectionAsync()
     {
-        AppLog.Write("protection-stop-requested");
-        var stopTask = _engine.StopAsync();
-        SetStartButtons(false, "Stopping…");
-        if (_recorder is not null)
+        if (_stopping) return;
+        _stopping = true;
+        try
         {
-            try
+            AppLog.Write("protection-stop-requested");
+            var stopTask = _engine.StopAsync();
+            SetStartButtons(false, "Stopping…");
+            if (_recorder is not null)
             {
-                var recordedPath = await _recorder.StopAsync();
-                RecordStatus.Text = "Saved: " + recordedPath;
+                try
+                {
+                    var recordedPath = await _recorder.StopAsync();
+                    RecordStatus.Text = "Saved: " + recordedPath;
+                }
+                catch (Exception ex)
+                {
+                    RecordStatus.Text = "Recording error: " + ex.Message;
+                }
+                _recorder = null;
+                RecordButton.Content = "Start recording";
             }
+            try { await stopTask; }
             catch (Exception ex)
             {
-                RecordStatus.Text = "Recording error: " + ex.Message;
+                MessageBox.Show(this, ex.Message, "Stop reported an error",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
             }
-            _recorder = null;
-            RecordButton.Content = "Start recording";
+            SetStartButtons(true, "Start protection");
+            StateText.Text = "Idle";
+            HeroEyebrow.Text = "PROTECTION OFF";
+            HeroTitle.Text = "Your screen is not being captured.";
+            HeroBody.Text = "Start protection to capture selected displays, run three ONNX models locally, and draw click-through censor overlays.";
+            RefreshExportMonitors();
+            UpdateStatus();
         }
-        try { await stopTask; }
-        catch (Exception ex)
+        finally
         {
-            MessageBox.Show(this, ex.Message, "Stop reported an error",
-                MessageBoxButton.OK, MessageBoxImage.Warning);
+            _stopping = false;
+            SetStartButtons(true, _engine.IsRunning ? "Stop protection" : "Start protection");
         }
-        SetStartButtons(true, "Start protection");
-        StateText.Text = "Idle";
-        HeroEyebrow.Text = "PROTECTION OFF";
-        HeroTitle.Text = "Your screen is not being captured.";
-        HeroBody.Text = "Start protection to capture selected displays, run three ONNX models locally, and draw click-through censor overlays.";
-        RefreshExportMonitors();
-        UpdateStatus();
     }
 
     private void SetStartButtons(bool enabled, string text)
@@ -631,7 +655,7 @@ public partial class MainWindow : Window
             : "Nothing is being captured.";
         StatePill.BorderBrush = running ? (Brush)FindResource("AccentBrush") : (Brush)FindResource("BorderBrush");
 
-        if (!_starting)
+        if (!_starting && !_stopping)
         {
             HeaderStartButton.Content = running ? "Stop protection" : "Start protection";
             HeroStartButton.Content = HeaderStartButton.Content;

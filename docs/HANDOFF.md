@@ -1,4 +1,32 @@
-# 최신 이어받기 — 보호 안정화
+# 최신 이어받기 — M1–M2 후속 작업
+
+`952380a` 이후 검증: [ACCEPTANCE-20261022.md](ACCEPTANCE-20261022.md).
+재검증 없이 기존 작업을 되돌리지 않는다. Fail-Closed 정책과 기록을 보존한다.
+
+현재 source는 녹화 writer 수명/통계, 세그멘테이션 캐시 보존, UI 초기화 취소 버튼을 보완했다.
+`scripts/Test-Headless.ps1`에 새 `RecordingProbe`가 포함된다. Core42개와 별도의 프로브 assertions를 혼동하지 않는다.
+
+다음 최우선은 명시적 화면 사용 허용을 받은 후 사용자가 직접 UI Cancel/Stop을 누르고,
+뷰어에 포커스한 상태의 Ctrl+Shift+F10을 확인하는 것이다. 기존 키 입력 도구의 즉시 state 캡처는
+입력 처리 전 상태를 반환할 수 있었다. 포커스 갱신 후 조작하고 완료 상태를 별도로 읽는다.
+사용자 정렬 관찰 또는 로컬 프레임 증거 없이 표시 픽셀의 정확한 가림을 VERIFIED로 올리지 않는다.
+
+실제 좌표 측정과 초기화 취소는 사용자 허용 후에만:
+`dotnet run --project tools/LivePipelineProbe -c Release -- --interactive <명시적 이미지> <새 로컬 데이터 루트> --initialization-cancel`.
+window/overlay를 만들지 않는 인벤토리는 동일 도구의 `--inventory`다.
+
+수정한 UI 시험 전 `dotnet build tools/SubjectViewer -c Release`를 실행한다.
+`scripts/Invoke-InteractiveValidation.ps1 -Interactive -ImagePath <파일> -AppPath <새 앱> -DurationSeconds 120`
+는 console 없는 전용 뷰어를 사용하고 `resources.jsonl`을 로컬 테스트 루트에 기록한다.
+뷰어·라이브 도구는 opt-in 없이 실행하면 코드2로 종료한다.
+
+기존 배포 ZIP은952380a 기준이다. 이번 소스는 Release 디렉터리에서 수동 실행하며 새 배포본은 만들지 않았다.
+soak 실행 중 동일 프로브 출력 디렉터리에 빌드하면 Windows DLL 잠금으로 실패한다.
+프로세스를 죽이지 말고 종료를 기다리거나, 실행 전에 출력 폴더를 새로운 artifacts 경로로 복사한다.
+
+아래는 이전 복구 세션의 기록이며 위 최신 상태가 우선한다.
+
+# 이전 이어받기 — 보호 안정화
 
 먼저 [RECOVERY-20261022.md](RECOVERY-20261022.md)를 읽는다. 실제 화면 테스트는 사용자 허용 후만 실행한다.
 `scripts/Test-Headless.ps1`은 창 없이 42개 테스트, Release 빌드, 보호 프로브와 WPF 초기화를 검증한다.

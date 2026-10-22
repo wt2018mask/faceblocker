@@ -18,6 +18,11 @@ internal static class Program
     {
         try
         {
+            if (args.Length == 4 && args[0] == "--soak")
+            {
+                RunSoak(args[1], args[2], int.Parse(args[3]));
+                return 0;
+            }
             VerifyStalledInference();
             VerifyOpaqueCover();
             if (args.Length == 2) VerifyRealModels(args[0], args[1]);
@@ -30,6 +35,74 @@ internal static class Program
     private static void Require(bool value, string message)
     {
         if (!value) throw new InvalidOperationException(message);
+    }
+
+    private static void RunSoak(string models, string image, int seconds)
+    {
+        if (seconds is < 30 or > 1800) throw new ArgumentOutOfRangeException(nameof(seconds));
+        var decoded = BitmapFrame.Create(new Uri(Path.GetFullPath(image)), BitmapCreateOptions.None, BitmapCacheOption.OnLoad);
+        var bitmap = new FormatConvertedBitmap(decoded, PixelFormats.Bgra32, null, 0);
+        var bounds = new PixelRect(0, 0, bitmap.PixelWidth, bitmap.PixelHeight);
+        var monitor = new MonitorDescriptor("fixture", "fixture", "fixture", -bitmap.PixelWidth, 0, bitmap.PixelWidth, bitmap.PixelHeight, 1.5, false);
+        var settings = new AppSettings();
+        settings.Performance.BodyScanRateHz = 30;
+        using var pipeline = new VisionPipeline(new VisionPipelineOptions { ModelDirectory = Path.GetFullPath(models), UseDirectML = false, InferenceThreads = 2 });
+        pipeline.StartProtection(settings, Environment.TickCount64);
+        using var frame = VideoFrame.Rent(bitmap.PixelWidth, bitmap.PixelHeight, bitmap.PixelWidth * 4, 1, 0, "fixture", bounds);
+        bitmap.CopyPixels(frame.Pixels, frame.Stride, 0);
+        long passes = 0;
+        VeilDesk.Inference.AnalysisResult Analyze()
+        {
+            var now = Environment.TickCount64;
+            using var current = VideoFrame.Rent(bitmap.PixelWidth, bitmap.PixelHeight, bitmap.PixelWidth * 4, ++passes, now, "fixture", bounds);
+            frame.Span.CopyTo(current.Pixels);
+            pipeline.ReportFrame(now);
+            return pipeline.Analyze(current, settings, now);
+        }
+        for (var i = 0; i < 20; i++)
+        {
+            var warmup = Analyze();
+            if (i % 4 == 0) ExportService.Composite(bitmap, monitor, warmup.Regions, settings);
+        }
+        GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect();
+        using var process = Process.GetCurrentProcess();
+        process.Refresh();
+        var initialPrivate = process.PrivateMemorySize64;
+        var initialHandles = process.HandleCount;
+        var initialThreads = process.Threads.Count;
+        var initialCpu = process.TotalProcessorTime;
+        var latency = new VeilDesk.Core.Diagnostics.LatencyTracker(8192);
+        var timer = Stopwatch.StartNew();
+        var measuredPasses = 0;
+        var composites = 0;
+        var nextLog = TimeSpan.Zero;
+        while (timer.Elapsed.TotalSeconds < seconds)
+        {
+            var start = Stopwatch.GetTimestamp();
+            var result = Analyze();
+            Require(result.Error is null, "inference failed during soak");
+            Require(result.Tracks.Count <= 32, "fixture track count grew without bound");
+            latency.Add(result.TotalMs);
+            measuredPasses++;
+            if (measuredPasses % 10 == 0) { ExportService.Composite(bitmap, monitor, result.Regions, settings); composites++; }
+            if (timer.Elapsed >= nextLog)
+            {
+                process.Refresh();
+                Console.WriteLine($"soak seconds={timer.Elapsed.TotalSeconds:F1} passes={measuredPasses} privateMiB={process.PrivateMemorySize64 / 1048576.0:F1} workingMiB={process.WorkingSet64 / 1048576.0:F1} handles={process.HandleCount} threads={process.Threads.Count} tracks={result.Tracks.Count}");
+                nextLog += TimeSpan.FromSeconds(10);
+            }
+            var rest = 100 - (int)Stopwatch.GetElapsedTime(start).TotalMilliseconds;
+            if (rest > 0) Thread.Sleep(rest);
+        }
+        GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect();
+        process.Refresh();
+        var deltaPrivate = process.PrivateMemorySize64 - initialPrivate;
+        var deltaHandles = process.HandleCount - initialHandles;
+        var deltaThreads = process.Threads.Count - initialThreads;
+        var cpuPercent = (process.TotalProcessorTime - initialCpu).TotalSeconds / timer.Elapsed.TotalSeconds / Environment.ProcessorCount * 100;
+        var summary = latency.Snapshot();
+        Require(deltaPrivate < 128L * 1024 * 1024 && deltaHandles <= 16 && deltaThreads <= 4, "soak exceeded stated post-warmup resource-growth limits");
+        Console.WriteLine($"PASS headless soak duration={timer.Elapsed.TotalSeconds:F1}s passes={measuredPasses} composites={composites} privateDeltaMiB={deltaPrivate / 1048576.0:F1} handleDelta={deltaHandles} threadDelta={deltaThreads} normalizedCpuPercent={cpuPercent:F1} p50={summary.P50Ms:F1} p95={summary.P95Ms:F1} p99={summary.P99Ms:F1}ms; no WGC/overlay windows; not desktop soak or exposure evidence");
     }
 
     private static void VerifyStalledInference()

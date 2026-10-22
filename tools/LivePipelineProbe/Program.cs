@@ -15,6 +15,17 @@ internal static class Program
     [STAThread]
     private static int Main(string[] args)
     {
+        if (args.Length == 1 && args[0] == "--inventory")
+        {
+            MonitorEnumerator.EnablePerMonitorDpiAwareness();
+            var displays = MonitorEnumerator.Enumerate();
+            Console.WriteLine($"attached-windows-displays={displays.Count}; physical multi-monitor testing requires actual hardware");
+            foreach (var display in displays)
+                Console.WriteLine($"display width={display.Width} height={display.Height} x={display.X} y={display.Y} dpi={display.DpiScale:F2} primary={display.IsPrimary}");
+            return 0;
+        }
+        var cancelInitialization = args.Contains("--initialization-cancel");
+        args = args.Where(a => a != "--initialization-cancel").ToArray();
         if (args.Length != 3 || args[0] != "--interactive")
         {
             Console.Error.WriteLine("No UI started. Deliberate invocation only: LivePipelineProbe --interactive <local-image> <local-data-directory>");
@@ -49,6 +60,31 @@ internal static class Program
                 var settings = new AppSettings();
                 settings.Performance.UseDirectML = false;
                 settings.Censoring.Style = CensorStyle.Solid;
+                if (cancelInitialization)
+                {
+                    using var entered = new ManualResetEventSlim();
+                    using var release = new ManualResetEventSlim();
+                    await using var initializing = new VeilDeskEngine(window.Dispatcher, options =>
+                    {
+                        entered.Set();
+                        if (!release.Wait(3000)) throw new TimeoutException("test model loader was not released");
+                        return VeilDesk.Inference.VisionModels.Load(options);
+                    });
+                    var start = initializing.StartAsync(settings, monitors);
+                    if (!await Task.Run(() => entered.Wait(2000))) throw new InvalidOperationException("model initialization was not reached");
+                    var stop = initializing.StopAsync();
+                    try
+                    {
+                        await Task.Delay(100);
+                        if (application.Windows.OfType<OverlayWindow>().Any()) throw new InvalidOperationException("initialization cancellation left a cover visible");
+                    }
+                    finally { release.Set(); }
+                    var cancelled = false;
+                    try { await start; } catch (OperationCanceledException) { cancelled = true; }
+                    await stop;
+                    if (!cancelled || initializing.IsRunning) throw new InvalidOperationException("initialization did not cancel cleanly");
+                    Console.WriteLine("PASS initialization cancellation: overlay removed before loader completion; no capture started; cancelled start; clean stop");
+                }
                 var positiveSamples = 0;
                 for (var run = 0; run < 2; run++)
                 {
@@ -61,6 +97,15 @@ internal static class Program
                         await Task.Delay(1000, cancel.Token);
                         var status = engine.GetStatus();
                         var monitor = status.Monitors.First();
+                        var placements = engine.MeasureOverlayPlacements();
+                        foreach (var placement in placements)
+                        {
+                            if (placement.ExpectedWindow != placement.ActualWindow)
+                                throw new InvalidOperationException("Native overlay bounds do not match physical display bounds");
+                            var maximum = placement.Regions.Select(r => r.MaximumEdgeError).DefaultIfEmpty(0).Max();
+                            if (maximum > 1.0) throw new InvalidOperationException("Rendered mask is misaligned in physical coordinates");
+                            Console.WriteLine($"placement dpi={placement.DpiScale:F2} masks={placement.Regions.Count} maxEdgeErrorPixels={maximum:F3} detectedMasks={placement.Regions.Count(r => r.Kind == VeilDesk.Core.Censoring.CensorRegionKind.Detection)}");
+                        }
                         if (!monitor.FailClosed && monitor.Regions > 0) { positiveSamples++; protectedTargetSeen = true; }
                         if (protectedTargetSeen && monitor.Tracks > 0 && monitor.Regions == 0 && !monitor.FailClosed)
                             throw new InvalidOperationException("Previously protected live target has no coverage");

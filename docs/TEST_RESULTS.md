@@ -1,4 +1,28 @@
-# 최신 실행 결과 — 2026-10-22 복구 세션
+# 최신 실행 결과 — M1–M2 후속 세션 (2026-10-22)
+
+전체 근거/재현 명령: [ACCEPTANCE-20261022.md](ACCEPTANCE-20261022.md).
+
+| 실행 | 결과 |
+|---|---|
+| `scripts/Test-Headless.ps1` | VERIFIED:42/42 Core, Release0오류/0경고(RunAnalyzers=false), 기존 보호/WPF 프로브 및 새 recorder/cache 프로브 PASS |
+| `RecordingProbe -- models artifacts/live-test/crop3.png` | VERIFIED: 실제 모델 마스크2개, PNG+디코딩24 AVI프레임,1.600초/벽시계약1.61초, uniqueSources1/FPS고정 |
+| 녹화 차단·동시 Stop 회귀 | VERIFIED:4.3초 초과 차단 중 조기 완료 없음, 동일 Stop Task, 해제 후 idx1완료 |
+| 세그멘테이션 캐시 회귀 | VERIFIED: 창을 표시하지 않고1000회 마스크 교체/캐시1개 이하/Clear0 |
+| `ProtectionProbe --soak models artifacts/live-test/crop3.png 300` | VERIFIED:300.1초2521회분석/252합성, 자원 증가 기준 PASS(화면/창 없음) |
+| `LivePipelineProbe --interactive ... --initialization-cancel` | VERIFIED: 제어된 초기화 취소,2×8초 캡처·좌표 계측, 최대0.484px, 종료 overlay0 |
+| 기존952380a 실제 UI Start/전역키 | VERIFIED:Start2회, 실제 Ctrl+Shift+F10으로Idle복귀. 다른 앱 포커스는 미실행 |
+| 새 전용 뷰어 | VERIFIED: 실제 HWND/제목이 창 목록에 나타남. 기본 호출은opt-in거부 |
+| 수정한 UI Cancel/Stop 및 다른 앱 포커스 비상키 | NOT RUN: 허용 시간 내 키보드 탐색 미완료. API 취소와 구분 |
+| 물리 표시 픽셀/프레임별 노출, 실제 데스크톱 AVI, 장시간 live soak | PARTIAL/NOT RUN: 상세문서 참조 |
+| 물리 복수 모니터 | BLOCKED: 실제 연결 화면1개, 기존 합성 테스트와 구분 |
+
+실패도 보존: 중간 전체 회귀는 실행 중 soak 프로세스의 DLL 잠금으로 MSB3027/MSB3021 실패.
+soak 정상 종료 후 재실행 PASS. 첫 UI의 resources.jsonl은 계측 도입 전이므로 존재하지 않으며 0사용량 증거가 아니다.
+화면 이미지는 외부 전송하지 않았다. 새 PNG/AVI는 정적 로컬 fixture의 테스트 산출물이며 ignored artifacts에만 보관했다.
+
+아래는 이전 세션의 실행 기록이다.
+
+# 이전 실행 결과 — 2026-10-22 복구 세션
 
 사용자 허용 후 `tools/LivePipelineProbe`로 실제 WGC→ONNX→추적→오버레이를 실행했다.
 최종 실행 PASS(exit 0): 두 번의 8초 구간, 캡처 119/118프레임, 분석 15/16회,
