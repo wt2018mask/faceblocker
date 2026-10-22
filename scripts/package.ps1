@@ -32,7 +32,10 @@ $project = Join-Path $root "src\VeilDesk.App\VeilDesk.App.csproj"
 $models = Join-Path $root "models"
 $builtinPacks = Join-Path $root "builtin-packs"
 $zipPath = if ($Output) { $publishDir + '.zip' } else { Join-Path $artifacts "VeilDesk-1.0.0-$Runtime.zip" }
-if (Test-Path -LiteralPath $publishDir) { throw "Preserving existing publish folder: $publishDir. Pass -Output with a new path." }
+if ((Test-Path -LiteralPath $publishDir) -and
+    @((Get-ChildItem -LiteralPath $publishDir -Force -ErrorAction Stop)).Count -gt 0) {
+    throw "Preserving existing publish folder: $publishDir. Pass -Output with a new path."
+}
 if (-not $SkipZip -and (Test-Path -LiteralPath $zipPath)) { throw "Preserving existing archive: $zipPath. Pass -Output with a new path." }
 
 function Require-File([string]$Path, [string]$Hint = "") {

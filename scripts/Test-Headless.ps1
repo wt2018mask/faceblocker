@@ -8,7 +8,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "Tests failed: $LASTEXITCODE" }
     & $dotnet build src/VeilDesk.App/VeilDesk.App.csproj -c Release --no-restore --nologo -p:RunAnalyzers=false
     if ($LASTEXITCODE -ne 0) { throw "Build failed: $LASTEXITCODE" }
-    & $dotnet run --project tools/ProtectionProbe/ProtectionProbe.csproj -c Release -p:RunAnalyzers=false
+    & $dotnet run --project tools/ProtectionProbe/ProtectionProbe.csproj -c Release --no-restore -p:RunAnalyzers=false
     if ($LASTEXITCODE -ne 0) { throw "Protection probe failed: $LASTEXITCODE" }
     & powershell -NoProfile -ExecutionPolicy Bypass -STA -File scripts/Show-TestSubject.ps1 -ValidateOnly
     if ($LASTEXITCODE -ne 0) { throw "Viewer control validation failed: $LASTEXITCODE" }
