@@ -36,7 +36,7 @@ public static class ExportService
         directory = Environment.ExpandEnvironmentVariables(directory);
         Directory.CreateDirectory(directory);
         path ??= System.IO.Path.Combine(directory,
-            $"VeilDesk-{DateTime.Now:yyyyMMdd-HHmmss}-{Sanitize(monitor.FriendlyName)}.png");
+            $"VeilDesk-{DateTime.Now:yyyyMMdd-HHmmss-fff}-{Guid.NewGuid():N}-{Sanitize(monitor.FriendlyName)}.png");
 
         BitmapSource snapshot = FrameImage.ToBitmap(frame);
         BitmapSource output = await dispatcher.InvokeAsync(() =>

@@ -13,8 +13,8 @@ namespace VeilDesk.App.Export;
 /// <summary>
 /// Records a censored, downscaled MJPEG AVI from the newest local capture
 /// frame. Frames are composited with the same <see cref="ExportService"/>
-/// renderer used for screenshots, so a recorded file cannot leak an
-/// uncensored crop. The recorder deliberately caps output at 1280x800 and
+/// renderer used for screenshots. Coverage still depends on detection and
+/// capture freshness; this is not a zero-exposure guarantee. Output is capped at 1280x800 and
 /// 15 fps to keep CPU and disk use predictable on integrated GPUs.
 /// </summary>
 public sealed class VideoRecorder
@@ -23,7 +23,7 @@ public sealed class VideoRecorder
     public const int MaxWidth = 1280;
     public const int MaxHeight = 800;
 
-    private readonly VeilDeskEngine _engine;
+    private readonly IRecordingSource _engine;
     private readonly AppSettings _settings;
     private readonly string _monitorId;
     private readonly bool _includeCensorship;
@@ -34,20 +34,22 @@ public sealed class VideoRecorder
     private MjpegAviWriter? _writer;
     private string? _path;
     private bool _started;
-    private bool _stopping;
+    private readonly object _lifecycle = new();
+    private Task<string>? _stopTask;
     private volatile string? _error;
     private long _framesWritten;
     private long _sourceFrames;
     private long _startTimestamp;
+    private long _endTimestamp;
 
-    public VideoRecorder(VeilDeskEngine engine, AppSettings settings, string monitorId,
-        bool includeCensorship)
+    public VideoRecorder(IRecordingSource engine, AppSettings settings, string monitorId,
+        bool includeCensorship, Dispatcher? dispatcher = null)
     {
         _engine = engine;
         _settings = settings.Clone();
         _monitorId = monitorId;
         _includeCensorship = includeCensorship;
-        _dispatcher = Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher;
+        _dispatcher = dispatcher ?? Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher;
     }
 
     public string? LastError => _error;
@@ -63,63 +65,64 @@ public sealed class VideoRecorder
         {
             var source = SourceFrames;
             if (source <= 0 || _startTimestamp == 0) return 0;
-            var seconds = Stopwatch.GetElapsedTime(_startTimestamp).TotalSeconds;
+            var end = Interlocked.Read(ref _endTimestamp);
+            var seconds = Stopwatch.GetElapsedTime(_startTimestamp, end == 0 ? Stopwatch.GetTimestamp() : end).TotalSeconds;
             return seconds > 0 ? source / seconds : 0;
         }
     }
 
-    public async Task<string> StartAsync()
+    public Task<string> StartAsync()
     {
-        if (_started) throw new InvalidOperationException("Recording is already running.");
-        if (!_engine.IsRunning) throw new InvalidOperationException("Protection is not running.");
-        var monitor = _engine.GetActiveMonitors().FirstOrDefault(m =>
-            string.Equals(m.Id, _monitorId, StringComparison.OrdinalIgnoreCase))
-            ?? throw new InvalidOperationException("The selected display is not being captured.");
+        lock (_lifecycle)
+        {
+            if (_started) throw new InvalidOperationException("Recording is already running.");
+            if (!_engine.IsRunning) throw new InvalidOperationException("Protection is not running.");
+            var monitor = _engine.GetActiveMonitors().FirstOrDefault(m =>
+                string.Equals(m.Id, _monitorId, StringComparison.OrdinalIgnoreCase))
+                ?? throw new InvalidOperationException("The selected display is not being captured.");
 
-        var scale = Math.Min(1.0, Math.Min((double)MaxWidth / monitor.Width,
-            (double)MaxHeight / monitor.Height));
-        var width = Math.Max(2, (int)Math.Round(monitor.Width * scale / 2) * 2);
-        var height = Math.Max(2, (int)Math.Round(monitor.Height * scale / 2) * 2);
+            var scale = Math.Min(1.0, Math.Min((double)MaxWidth / monitor.Width,
+                (double)MaxHeight / monitor.Height));
+            var width = Math.Max(2, (int)Math.Round(monitor.Width * scale / 2) * 2);
+            var height = Math.Max(2, (int)Math.Round(monitor.Height * scale / 2) * 2);
 
-        var directory = string.IsNullOrWhiteSpace(_settings.Creator.ExportDirectory)
-            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyPictures), "VeilDesk")
-            : Environment.ExpandEnvironmentVariables(_settings.Creator.ExportDirectory);
-        Directory.CreateDirectory(directory);
-        _path = Path.Combine(directory,
-            $"VeilDesk-{DateTime.Now:yyyyMMdd-HHmmss}-{Sanitize(monitor.FriendlyName)}.avi");
-        _writer = new MjpegAviWriter(_path, width, height, FramesPerSecond);
-        _startTimestamp = Stopwatch.GetTimestamp();
-        _started = true;
-        _loop = Task.Run(() => RecordLoopAsync(width, height, _cts.Token));
-        await Task.CompletedTask;
-        return _path;
+            var directory = string.IsNullOrWhiteSpace(_settings.Creator.ExportDirectory)
+                ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyPictures), "VeilDesk")
+                : Environment.ExpandEnvironmentVariables(_settings.Creator.ExportDirectory);
+            Directory.CreateDirectory(directory);
+            _path = Path.Combine(directory,
+                $"VeilDesk-{DateTime.Now:yyyyMMdd-HHmmss-fff}-{Guid.NewGuid():N}-{Sanitize(monitor.FriendlyName)}.avi");
+            _writer = new MjpegAviWriter(_path, width, height, FramesPerSecond);
+            _startTimestamp = Stopwatch.GetTimestamp();
+            _started = true;
+            _loop = Task.Run(() => RecordLoopAsync(width, height, _cts.Token));
+            return Task.FromResult(_path);
+        }
     }
 
-    public async Task<string> StopAsync()
+    public Task<string> StopAsync()
     {
-        if (!_started)
-            return _path ?? throw new InvalidOperationException("Recording was not started.");
-        if (_stopping)
-            return _path!;
-        _stopping = true;
+        lock (_lifecycle)
+        {
+            if (!_started)
+                throw new InvalidOperationException("Recording was not started.");
+            return _stopTask ??= StopCoreAsync();
+        }
+    }
+
+    private async Task<string> StopCoreAsync()
+    {
         _cts.Cancel();
         try
         {
             if (_loop is not null)
-                await _loop.WaitAsync(TimeSpan.FromSeconds(4));
-        }
-        catch (TimeoutException)
-        {
-            _error ??= "The recorder did not stop within four seconds.";
+                await _loop;
         }
         catch (OperationCanceledException)
         {
         }
         finally
         {
-            try { _writer?.Dispose(); }
-            catch (Exception ex) { _error ??= ex.Message; }
-            _writer = null;
             _cts.Dispose();
         }
 
@@ -136,64 +139,80 @@ public sealed class VideoRecorder
         // timeline catches up with the wall clock. Without this the file would
         // declare 15 fps while containing fewer frames and would play back
         // faster than the recorded session.
-        var startTimestamp = Stopwatch.GetTimestamp();
         long timelineFrames = 0;
-        while (!token.IsCancellationRequested)
+        (long Number, long Time)? previousSource = null;
+        try
         {
-            var started = Stopwatch.GetTimestamp();
-            try
+            while (!token.IsCancellationRequested)
             {
-                using var capture = _engine.TryGrabRecordingFrame(_monitorId);
-                if (capture is null)
+                var started = Stopwatch.GetTimestamp();
+                try
                 {
-                    await Task.Delay(15, token);
-                    continue;
+                    using var capture = _engine.TryGrabRecordingFrame(_monitorId);
+                    if (capture is null)
+                    {
+                        await Task.Delay(15, token);
+                        continue;
+                    }
+
+                    var bitmap = FrameImage.ToBitmap(capture.Frame);
+                    BitmapSource output = bitmap;
+                    if (_includeCensorship)
+                    {
+                        output = await _dispatcher.InvokeAsync(() => ExportService.Composite(
+                            bitmap, capture.Monitor, capture.Regions, _settings, width, height), DispatcherPriority.Background, token);
+                    }
+                    else if (bitmap.PixelWidth != width || bitmap.PixelHeight != height)
+                    {
+                        var scaled = new TransformedBitmap(bitmap,
+                            new System.Windows.Media.ScaleTransform(
+                                (double)width / bitmap.PixelWidth, (double)height / bitmap.PixelHeight));
+                        scaled.Freeze();
+                        output = scaled;
+                    }
+
+                    var jpeg = await Task.Run(() => EncodeJpeg(output), token);
+                    var elapsedSeconds = Stopwatch.GetElapsedTime(_startTimestamp).TotalSeconds;
+                    var targetFrames = Math.Max(1, (long)Math.Floor(elapsedSeconds * FramesPerSecond) + 1);
+                    while (!token.IsCancellationRequested && timelineFrames < targetFrames)
+                    {
+                        _writer!.WriteFrame(jpeg);
+                        timelineFrames++;
+                        Interlocked.Increment(ref _framesWritten);
+                    }
+                    var sourceKey = (capture.Frame.FrameNumber, capture.Frame.TimestampMs);
+                    if (previousSource != sourceKey)
+                    {
+                        previousSource = sourceKey;
+                        Interlocked.Increment(ref _sourceFrames);
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    _error = ex.Message;
+                    break;
                 }
 
-                var bitmap = FrameImage.ToBitmap(capture.Frame);
-                BitmapSource output = bitmap;
-                if (_includeCensorship)
+                var elapsed = Stopwatch.GetElapsedTime(started);
+                var remaining = interval - elapsed;
+                if (remaining > TimeSpan.Zero)
                 {
-                    output = await _dispatcher.InvokeAsync(() => ExportService.Composite(
-                        bitmap, capture.Monitor, capture.Regions, _settings, width, height));
+                    try { await Task.Delay(remaining, token); } catch (OperationCanceledException) { break; }
                 }
-                else if (bitmap.PixelWidth != width || bitmap.PixelHeight != height)
-                {
-                    var scaled = new TransformedBitmap(bitmap,
-                        new System.Windows.Media.ScaleTransform(
-                            (double)width / bitmap.PixelWidth, (double)height / bitmap.PixelHeight));
-                    scaled.Freeze();
-                    output = scaled;
-                }
-
-                var jpeg = await Task.Run(() => EncodeJpeg(output), token);
-                var elapsedSeconds = Stopwatch.GetElapsedTime(startTimestamp).TotalSeconds;
-                var targetFrames = (long)Math.Round(elapsedSeconds * FramesPerSecond);
-                do
-                {
-                    _writer?.WriteFrame(jpeg);
-                    timelineFrames++;
-                    Interlocked.Increment(ref _framesWritten);
-                }
-                while (timelineFrames < targetFrames);
-                Interlocked.Increment(ref _sourceFrames);
             }
-            catch (OperationCanceledException)
-            {
-                break;
-            }
-            catch (Exception ex)
-            {
-                _error = ex.Message;
-                break;
-            }
-
-            var elapsed = Stopwatch.GetElapsedTime(started);
-            var remaining = interval - elapsed;
-            if (remaining > TimeSpan.Zero)
-            {
-                try { await Task.Delay(remaining, token); } catch (OperationCanceledException) { break; }
-            }
+        }
+        finally
+        {
+            // The loop owns the writer. Stop never disposes it underneath an
+            // in-flight compositor, encoder or frame write.
+            try { _writer?.Dispose(); }
+            catch (Exception ex) { _error ??= ex.Message; }
+            _writer = null;
+            Interlocked.Exchange(ref _endTimestamp, Stopwatch.GetTimestamp());
         }
     }
 

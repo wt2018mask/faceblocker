@@ -39,6 +39,7 @@ public sealed class OverlayWindow : Window
     private BitmapSource? _snapshot;
     private ImageSource? _customImage;
     private string _customImagePath = "";
+    private string _maskColor = "";
     private double _dpiScale;
     private bool _positioned;
 
@@ -76,6 +77,7 @@ public sealed class OverlayWindow : Window
 
     public string MonitorId => _monitor.Id;
     public bool IsExcludedFromCapture { get; private set; }
+    public int CachedMaskCount => _maskCache.Count;
 
     public void ShowOverlay()
     {
@@ -130,6 +132,14 @@ public sealed class OverlayWindow : Window
     public void Render(IReadOnlyList<CensorRegion> regions, AppSettings settings, BitmapSource? snapshot)
     {
         if (!_positioned) PositionWindow();
+        if (_maskColor != settings.Censoring.Color)
+        {
+            _maskCache.Clear();
+            _maskColor = settings.Censoring.Color;
+        }
+        var activeMasks = regions.Where(r => r.Mask is not null).Select(r => r.Mask!).ToHashSet(ReferenceEqualityComparer.Instance);
+        foreach (var expired in _maskCache.Keys.Where(mask => !activeMasks.Contains(mask)).ToList())
+            _maskCache.Remove(expired);
         _snapshot = snapshot;
         _customImage = LoadCustomImage(settings.Censoring.ImagePath);
 
@@ -153,7 +163,35 @@ public sealed class OverlayWindow : Window
     {
         foreach (var visual in _visuals) visual.Visibility = Visibility.Collapsed;
         _snapshot = null;
+        _maskCache.Clear();
     }
+
+    public OverlayPlacement MeasurePlacement()
+    {
+        Dispatcher.VerifyAccess();
+        UpdateLayout();
+        var handle = new WindowInteropHelper(this).Handle;
+        if (!GetWindowRect(handle, out var rectangle))
+            throw new InvalidOperationException("Cannot measure overlay window bounds.");
+        var regions = _visuals.Where(v => v.Visibility == Visibility.Visible && v.ActualWidth > 0 && v.ActualHeight > 0)
+            .Select(v =>
+            {
+                var topLeft = v.PointToScreen(new Point(0, 0));
+                var bottomRight = v.PointToScreen(new Point(v.ActualWidth, v.ActualHeight));
+                return new RegionPlacement(v.RegionKind, v.ExpectedLocalBounds.Offset(_monitor.X, _monitor.Y),
+                    new PixelRect(topLeft.X, topLeft.Y, bottomRight.X - topLeft.X, bottomRight.Y - topLeft.Y));
+            }).ToList();
+        return new OverlayPlacement(_monitor.Id, _monitor.Bounds,
+            new PixelRect(rectangle.Left, rectangle.Top, rectangle.Right - rectangle.Left, rectangle.Bottom - rectangle.Top),
+            _dpiScale, regions);
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativeRect { public int Left, Top, Right, Bottom; }
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetWindowRect(IntPtr window, out NativeRect rectangle);
 
     private CensorVisual GetVisual(int index)
     {
@@ -215,6 +253,8 @@ public sealed class OverlayWindow : Window
 /// </summary>
 internal sealed class CensorVisual : Grid
 {
+    internal PixelRect ExpectedLocalBounds { get; private set; }
+    internal CensorRegionKind RegionKind { get; private set; }
     private readonly Border _fill = new();
     private readonly Image _image = new() { Stretch = Stretch.Fill };
     private readonly Border _tint = new();
@@ -263,6 +303,8 @@ internal sealed class CensorVisual : Grid
         // the region box could produce an empty rectangle on a secondary
         // display and leave that screen completely uncensored.
         var box = isFailClosed ? monitor.LocalBounds : region.Box.Clip(monitor.LocalBounds);
+        ExpectedLocalBounds = box;
+        RegionKind = region.Kind;
         if (box.IsEmpty)
         {
             Visibility = Visibility.Collapsed;

@@ -80,11 +80,12 @@ public sealed class RecordingFrame : IDisposable
 /// that uses prediction between inferences, fail-closed supervision, session
 /// statistics, and screenshot export.
 /// </summary>
-public sealed class VeilDeskEngine : IAsyncDisposable
+public sealed class VeilDeskEngine : IAsyncDisposable, IRecordingSource
 {
     private readonly CaptureService _capture = new();
     private readonly Dispatcher _ui;
     private readonly OverlayService _overlay;
+    private readonly Func<VisionPipelineOptions, VisionModels> _loadModels;
     private readonly List<MonitorRunner> _runners = new();
     private readonly SemaphoreSlim _lifecycle = new(1, 1);
     private int _rendering;
@@ -104,16 +105,20 @@ public sealed class VeilDeskEngine : IAsyncDisposable
     private string _provider = "-";
     private string? _dmlError;
 
-    public VeilDeskEngine(Dispatcher uiDispatcher)
+    public VeilDeskEngine(Dispatcher uiDispatcher, Func<VisionPipelineOptions, VisionModels>? loadModels = null)
     {
         _ui = uiDispatcher;
         _overlay = new OverlayService(uiDispatcher);
+        _loadModels = loadModels ?? VisionModels.Load;
     }
 
     public bool IsRunning => _running;
     public AppSettings Settings => _settings;
     public string Provider => _provider;
     public string ProviderDetail => _dmlError is null ? _provider : $"{_provider} ({_dmlError})";
+
+    public IReadOnlyList<OverlayPlacement> MeasureOverlayPlacements()
+        => _ui.CheckAccess() ? _overlay.MeasurePlacements() : _ui.Invoke(_overlay.MeasurePlacements);
 
     public event Action? StateChanged;
 
@@ -171,7 +176,7 @@ public sealed class VeilDeskEngine : IAsyncDisposable
             if (!_overlay.AllExcludedFromCapture)
                 throw new InvalidOperationException("Overlay capture exclusion failed; protection cannot start safely.");
             _provider = "loading models";
-            _models = await Task.Run(() => VisionModels.Load(options));
+            _models = await Task.Run(() => _loadModels(options));
             token.ThrowIfCancellationRequested();
             _provider = _models.Provider;
             _dmlError = _models.DirectMLError;

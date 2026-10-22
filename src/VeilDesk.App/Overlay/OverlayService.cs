@@ -26,6 +26,12 @@ public sealed class OverlayService : IDisposable
     public bool IsRunning { get; private set; }
     public bool AllExcludedFromCapture { get; private set; }
 
+    public IReadOnlyList<OverlayPlacement> MeasurePlacements()
+    {
+        _dispatcher.VerifyAccess();
+        return _windows.Values.Select(w => w.MeasurePlacement()).ToList();
+    }
+
     public void Start(IReadOnlyList<MonitorDescriptor> monitors)
     {
         Stop();
