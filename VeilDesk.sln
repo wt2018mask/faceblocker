@@ -1,0 +1,50 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{1690D05C-FA4D-4E1F-8B00-AF82F9269623}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VeilDesk.Core", "src\VeilDesk.Core\VeilDesk.Core.csproj", "{0C5BF280-2920-4184-961D-7E0E63F0EB02}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VeilDesk.App", "src\VeilDesk.App\VeilDesk.App.csproj", "{88261C26-2B15-4C08-BE10-A153BF7DEE21}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{09E2F737-4343-42AE-8B16-2361C4ADB56E}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VeilDesk.Core.Tests", "tests\VeilDesk.Core.Tests\VeilDesk.Core.Tests.csproj", "{851700DE-A474-4D11-9C06-DCD45CB1114D}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VeilDesk.Inference", "src\VeilDesk.Inference\VeilDesk.Inference.csproj", "{A7A8CEFA-7809-44AA-82A5-2E235AE66711}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{0C5BF280-2920-4184-961D-7E0E63F0EB02}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0C5BF280-2920-4184-961D-7E0E63F0EB02}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0C5BF280-2920-4184-961D-7E0E63F0EB02}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0C5BF280-2920-4184-961D-7E0E63F0EB02}.Release|Any CPU.Build.0 = Release|Any CPU
+		{88261C26-2B15-4C08-BE10-A153BF7DEE21}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{88261C26-2B15-4C08-BE10-A153BF7DEE21}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{88261C26-2B15-4C08-BE10-A153BF7DEE21}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{88261C26-2B15-4C08-BE10-A153BF7DEE21}.Release|Any CPU.Build.0 = Release|Any CPU
+		{851700DE-A474-4D11-9C06-DCD45CB1114D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{851700DE-A474-4D11-9C06-DCD45CB1114D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{851700DE-A474-4D11-9C06-DCD45CB1114D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{851700DE-A474-4D11-9C06-DCD45CB1114D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A7A8CEFA-7809-44AA-82A5-2E235AE66711}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A7A8CEFA-7809-44AA-82A5-2E235AE66711}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A7A8CEFA-7809-44AA-82A5-2E235AE66711}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A7A8CEFA-7809-44AA-82A5-2E235AE66711}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{0C5BF280-2920-4184-961D-7E0E63F0EB02} = {1690D05C-FA4D-4E1F-8B00-AF82F9269623}
+		{88261C26-2B15-4C08-BE10-A153BF7DEE21} = {1690D05C-FA4D-4E1F-8B00-AF82F9269623}
+		{851700DE-A474-4D11-9C06-DCD45CB1114D} = {09E2F737-4343-42AE-8B16-2361C4ADB56E}
+		{A7A8CEFA-7809-44AA-82A5-2E235AE66711} = {1690D05C-FA4D-4E1F-8B00-AF82F9269623}
+	EndGlobalSection
+EndGlobal

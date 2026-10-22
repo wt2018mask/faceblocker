@@ -1,0 +1,250 @@
+using VeilDesk.Core.Detection;
+using VeilDesk.Core.Geometry;
+using DetectionRecord = VeilDesk.Core.Detection.Detection;
+
+namespace VeilDesk.Core.Tracking;
+
+public enum PersonGender
+{
+    Unknown,
+    Female,
+    Male
+}
+
+/// <summary>A live tracked prediction. Instances are mutated only by the tracker.</summary>
+public sealed class TrackedDetection
+{
+    public required int Id { get; init; }
+    public required BodyRegion Region { get; init; }
+    public PixelRect Box { get; internal set; }
+    public PixelRect SmoothedBox { get; internal set; }
+    public double Confidence { get; internal set; }
+    public double VelocityX { get; internal set; }
+    public double VelocityY { get; internal set; }
+    public long FirstSeenMs { get; init; }
+    public long LastSeenMs { get; internal set; }
+    public long LastPredictionMs { get; internal set; }
+    public int Missed { get; internal set; }
+    public byte[]? Mask { get; internal set; }
+    public int MaskWidth { get; internal set; }
+    public int MaskHeight { get; internal set; }
+    public PixelRect MaskBox { get; internal set; }
+    public bool HasExposedEvidence { get; internal set; }
+    public long LastExposureEvidenceMs { get; internal set; }
+    public PersonGender Gender { get; internal set; }
+    public bool IsPerson => Region == BodyRegion.Person;
+
+    public PixelRect PredictedBox(long nowMs, int horizonMs, double motionPadding, PixelRect bounds)
+    {
+        var seconds = Math.Max(0, nowMs - LastSeenMs) / 1000.0 + Math.Max(0, horizonMs) / 1000.0;
+        var predicted = SmoothedBox.Offset(VelocityX * seconds, VelocityY * seconds);
+        var speed = Math.Sqrt(VelocityX * VelocityX + VelocityY * VelocityY);
+        // Uncertainty grows with time since detection and with observed speed.
+        var uncertainty = motionPadding + Math.Min(0.8, speed / 3000.0) * 0.25 + Math.Min(0.4, seconds);
+        predicted = predicted.ExpandFraction(uncertainty);
+        return predicted.Clip(bounds);
+    }
+}
+
+public sealed class TrackerOptions
+{
+    public double MinimumIoU { get; set; } = 0.08;
+    public double MaximumCenterDistanceFraction { get; set; } = 0.35;
+    public double VelocitySmoothing { get; set; } = 0.45;
+    public double BoxSmoothing { get; set; } = 0.65;
+    public int MaxMissedFrames { get; set; } = 30;
+    public int EvidenceMemoryMs { get; set; } = 2000;
+}
+
+/// <summary>
+/// Lightweight online multi-object tracker. It intentionally avoids external
+/// native tracking dependencies: association by IoU/center distance, exponential
+/// box smoothing, constant-velocity prediction and configurable persistence.
+/// </summary>
+public sealed class SubjectTracker
+{
+    private readonly List<TrackedDetection> _tracks = new();
+    private readonly object _gate = new();
+    private int _nextId;
+    private long _lastUpdateMs;
+    private bool _hasLastUpdate;
+    private readonly TrackerOptions _options;
+
+    public SubjectTracker(TrackerOptions? options = null)
+    {
+        _options = options ?? new TrackerOptions();
+    }
+
+    public IReadOnlyList<TrackedDetection> Snapshot()
+    {
+        lock (_gate) return _tracks.ToList();
+    }
+
+    public int ActiveTrackCount { get { lock (_gate) return _tracks.Count; } }
+
+    public IReadOnlyList<TrackedDetection> Update(IReadOnlyList<DetectionRecord> detections, long nowMs, PixelRect bounds)
+    {
+        lock (_gate)
+        {
+            var dt = _hasLastUpdate ? Math.Max(0, nowMs - _lastUpdateMs) / 1000.0 : 0.0;
+            _lastUpdateMs = nowMs;
+            _hasLastUpdate = true;
+
+            var unmatchedTracks = new HashSet<int>(_tracks.Select(t => t.Id));
+            var unmatchedDetections = new List<DetectionRecord>(detections);
+
+            // Higher-confidence and larger detections claim tracks first.
+            var orderedDetections = detections
+                .OrderByDescending(d => d.Confidence)
+                .ThenByDescending(d => d.Box.Area)
+                .ToList();
+
+            foreach (var detection in orderedDetections)
+            {
+                TrackedDetection? bestTrack = null;
+                var bestScore = double.NegativeInfinity;
+                foreach (var track in _tracks)
+                {
+                    if (!unmatchedTracks.Contains(track.Id)) continue;
+                    if (track.Region != detection.Region) continue;
+                    if ((nowMs - track.LastSeenMs) > 3000) continue;
+
+                    var iou = track.PredictedBox(nowMs, 0, 0.05, bounds).IoU(detection.Box);
+                    var diag = Math.Sqrt(bounds.Width * bounds.Width + bounds.Height * bounds.Height);
+                    var distance = track.SmoothedBox.CenterDistance(detection.Box) / Math.Max(1, diag);
+                    if (iou < _options.MinimumIoU && distance > _options.MaximumCenterDistanceFraction) continue;
+
+                    var score = iou * 0.75 + (1.0 - Math.Min(1.0, distance)) * 0.25;
+                    if (score > bestScore)
+                    {
+                        bestScore = score;
+                        bestTrack = track;
+                    }
+                }
+
+                if (bestTrack is null)
+                {
+                    var track = new TrackedDetection
+                    {
+                        Id = Interlocked.Increment(ref _nextId),
+                        Region = detection.Region,
+                        Box = detection.Box,
+                        SmoothedBox = detection.Box,
+                        Confidence = detection.Confidence,
+                        FirstSeenMs = nowMs,
+                        LastSeenMs = nowMs,
+                        LastPredictionMs = nowMs
+                    };
+                    ApplyMask(track, detection);
+                    _tracks.Add(track);
+                    unmatchedDetections.Remove(detection);
+                    continue;
+                }
+
+                var previousCenterX = bestTrack.SmoothedBox.CenterX;
+                var previousCenterY = bestTrack.SmoothedBox.CenterY;
+                if (dt > 0.001)
+                {
+                    var vx = (detection.Box.CenterX - previousCenterX) / dt;
+                    var vy = (detection.Box.CenterY - previousCenterY) / dt;
+                    vx = Math.Clamp(vx, -6000, 6000);
+                    vy = Math.Clamp(vy, -6000, 6000);
+                    bestTrack.VelocityX = bestTrack.VelocityX * (1 - _options.VelocitySmoothing) + vx * _options.VelocitySmoothing;
+                    bestTrack.VelocityY = bestTrack.VelocityY * (1 - _options.VelocitySmoothing) + vy * _options.VelocitySmoothing;
+                }
+
+                var alpha = _options.BoxSmoothing;
+                bestTrack.SmoothedBox = Lerp(bestTrack.SmoothedBox, detection.Box, alpha);
+                bestTrack.Box = detection.Box;
+                bestTrack.Confidence = detection.Confidence;
+                bestTrack.LastSeenMs = nowMs;
+                bestTrack.LastPredictionMs = nowMs;
+                bestTrack.Missed = 0;
+                ApplyMask(bestTrack, detection);
+                unmatchedTracks.Remove(bestTrack.Id);
+                unmatchedDetections.Remove(detection);
+            }
+
+            for (var i = _tracks.Count - 1; i >= 0; i--)
+            {
+                var track = _tracks[i];
+                if (unmatchedTracks.Contains(track.Id))
+                {
+                    track.Missed++;
+                    if (track.Missed > _options.MaxMissedFrames || nowMs - track.LastSeenMs > 5000)
+                        _tracks.RemoveAt(i);
+                }
+            }
+
+            UpdatePersonEvidence(nowMs);
+            return _tracks.ToList();
+        }
+    }
+
+    private void ApplyMask(TrackedDetection track, DetectionRecord detection)
+    {
+        if (detection.HasMask)
+        {
+            track.Mask = detection.Mask;
+            track.MaskWidth = detection.MaskWidth;
+            track.MaskHeight = detection.MaskHeight;
+            track.MaskBox = detection.Box;
+        }
+        else if (!track.IsPerson)
+        {
+            track.Mask = null;
+            track.MaskWidth = 0;
+            track.MaskHeight = 0;
+        }
+    }
+
+    private void UpdatePersonEvidence(long nowMs)
+    {
+        var bodyTracks = _tracks.Where(t => !t.IsPerson && nowMs - t.LastSeenMs <= _options.EvidenceMemoryMs).ToList();
+        foreach (var person in _tracks.Where(t => t.IsPerson))
+        {
+            var personBox = person.SmoothedBox.ExpandFraction(0.12);
+            var overlapping = bodyTracks
+                .Where(b => b.SmoothedBox.CenterX >= personBox.X - 32 &&
+                            b.SmoothedBox.CenterX <= personBox.Right + 32 &&
+                            b.SmoothedBox.CenterY >= personBox.Y - 32 &&
+                            b.SmoothedBox.CenterY <= personBox.Bottom + 32 &&
+                            (b.SmoothedBox.OverlapOfSmaller(personBox) > 0.15 || b.SmoothedBox.Intersects(personBox)))
+                .ToList();
+
+            var exposed = overlapping.Any(b => b.Region.IsExplicitExposed());
+            if (exposed)
+            {
+                person.HasExposedEvidence = true;
+                person.LastExposureEvidenceMs = nowMs;
+            }
+            else if (nowMs - person.LastExposureEvidenceMs > _options.EvidenceMemoryMs)
+            {
+                person.HasExposedEvidence = false;
+            }
+
+            var female = overlapping.Any(b => b.Region.IsGenderFemale());
+            var male = overlapping.Any(b => b.Region.IsGenderMale());
+            person.Gender = female && !male ? PersonGender.Female
+                : male && !female ? PersonGender.Male
+                : PersonGender.Unknown;
+        }
+    }
+
+    public void Reset()
+    {
+        lock (_gate)
+        {
+            _tracks.Clear();
+            _lastUpdateMs = 0;
+            _hasLastUpdate = false;
+        }
+    }
+
+    private static PixelRect Lerp(PixelRect a, PixelRect b, double t)
+        => new(
+            a.X + (b.X - a.X) * t,
+            a.Y + (b.Y - a.Y) * t,
+            a.Width + (b.Width - a.Width) * t,
+            a.Height + (b.Height - a.Height) * t);
+}
