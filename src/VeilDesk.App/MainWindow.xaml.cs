@@ -236,7 +236,7 @@ public partial class MainWindow : Window
             ModelsPathText.Text = ModelLocator.Find() ?? "(not found)";
             SettingsPathText.Text = _settingsStore.Path;
 
-            AboutVersion.Text = $"VeilDesk {typeof(MainWindow).Assembly.GetName().Version?.ToString(3) ?? "1.0.0"}";
+            AboutVersion.Text = $"VeilDesk {typeof(MainWindow).Assembly.GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false).Cast<System.Reflection.AssemblyInformationalVersionAttribute>().FirstOrDefault()?.InformationalVersion ?? "unknown"}\n{Environment.ProcessPath}\nSettings: {_settingsStore.Path}";
             AboutRuntime.Text = $".NET {Environment.Version} · {RuntimeInformation.OSDescription} · x64";
             AboutModels.Text = "YuNet (Face), NudeNet 320n (18 anatomical classes), YOLOv8n 320/480 (person), " +
                                "MediaPipe Selfie Segmentation (silhouette) — all ONNX, local only.";
@@ -689,7 +689,9 @@ public partial class MainWindow : Window
             _settings.Censoring.Style == CensorStyle.Solid &&
             string.Equals(_settings.Censoring.Color, "#000000", StringComparison.OrdinalIgnoreCase) &&
             _settings.Censoring.Opacity == 1;
-        FaceOnlyButton.Content = faceBlack ? "_Face selected · black" : "_Face only · black";
+        if (faceBlack) TargetSelectionHint.Text += " Face only · black is selected.";
+        FaceOnlyButton.Content = "_Face only · black";
+        System.Windows.Automation.AutomationProperties.SetName(FaceOnlyButton, "Face only · black");
     }
 
     private void UpdateStatus()

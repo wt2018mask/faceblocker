@@ -1,3 +1,11 @@
+# 최신 Instagram 사용자 확인 — 2026-10-23
+
+[INSTAGRAM-OBSERVED-20261023.md](INSTAGRAM-OBSERVED-20261023.md) 참조. canonical b9d5b07에서 사용자가 Face 버튼·실제 얼굴 가림·스크롤 후 새 얼굴과 과대 가림 없음·Chrome 클릭/입력/탭 정상·Stop 후 모든 가림 제거를 확인했다. 로그도 Start/Protecting/Stop 전이 확인. 짧은 사용자 관찰이며 무노출·일반 정확도·정량 ghost 개선 증거가 아니다. 이전 zero-censorship의 정확한 원인과 당시 EXE는 미확정. 전체 인수 PARTIAL, 영상/F10/장시간/export 등 NOT RUN, 릴리스/M10 BLOCKED. 아래는 이전 기록.
+
+# 최신 Face 회귀 감사 — 2026-10-23
+
+[FACE-RECOVERY-20261023.md](FACE-RECOVERY-20261023.md) 참조. Face preset 이름·build identity·명확한 실행 스크립트 추가. 실제 사용자 EXE 및 zero censorship 원인 미확정, 브라우저 회복 미검증. 아래는 이전 이력.
+
 # 최신 — 스크롤 추적·과잉 가림 수정 (2026-10-22)
 
 자세한 근거: [FACE-SCROLL-FIX-20261022.md](FACE-SCROLL-FIX-20261022.md). 기준 `1b488be` 이후, 브랜치 `codex/protection-recovery`.
